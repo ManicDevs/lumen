@@ -1,41 +1,57 @@
-BINARY     := lumen
-CMD_DIR    := ./cmd/lumen
-BUILD_DIR  := ./bin
-GOFLAGS    :=
+# ==============================================================================
+# Lumen - High Performance Build System Configuration (Spaces Only)
+# ==============================================================================
 
-.PHONY: all build run test clean fmt vet install tidy
+BINARY_NAME = lumen
+ENTRY_POINT = ./cmd/lumen/main.go
 
-all: build
+# Standard configuration defaults
+GO = go
+GOFLAGS = -trimpath
 
-## build: compile the binary into ./bin/lumen
+# --- High-Performance Tooling Configurations ---
+# -s -w: Strips all DWARF debugging structures and symbols to minimize binary size.
+LDFLAGS = -ldflags="-s -w"
+
+# -B: Disables Go runtime array/slice bounds checking. 
+# WARNING: Only use this flag if the test suite passes cleanly.
+PERF_GCFLAGS = -gcflags="all=-B"
+
+.PHONY: all build fast-build run-fast test clean help
+
+all: test build
+
 build:
-	@mkdir -p $(BUILD_DIR)
-	go build $(GOFLAGS) -o $(BUILD_DIR)/$(BINARY) $(CMD_DIR)
+	@echo "==> Building optimized deployment binary..."
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -o ./bin/$(BINARY_NAME) $(ENTRY_POINT)
+	@echo "==> Build complete: ./bin/$(BINARY_NAME)"
 
-## run: build then run, e.g. `make run ARGS="./internal/harvest/harvest.go"`
-run: build
-	$(BUILD_DIR)/$(BINARY) $(ARGS)
+fast-build:
+	@echo "==> Building ultra-performance binary (Bypassing Bounds Checking)..."
+	CGO_ENABLED=0 $(GO) build $(GOFLAGS) $(LDFLAGS) $(PERF_GCFLAGS) -o $(BINARY_NAME) $(ENTRY_POINT)
+	@echo "==> Ultra-performance build complete: ./$(BINARY_NAME)"
 
-## test: run the full test suite
+run-fast: fast-build
+	@echo "==> Launching Lumen in high-performance harvesting mode..."
+	@if [ -z "$(TARGET)" ]; then \
+	    echo "ERROR: Please specify a harvest target directory. Example: make run-fast TARGET=./internal"; \
+	    exit 1; \
+	fi
+	./$(BINARY_NAME) $(TARGET)
+
 test:
-	go test ./...
+	@echo "==> Running internal verification test suites..."
+	$(GO) test -v -race ./...
 
-## vet: run go vet
-vet:
-	go vet ./...
-
-## fmt: gofmt all source files
-fmt:
-	gofmt -l -w .
-
-## tidy: tidy go.mod/go.sum
-tidy:
-	go mod tidy
-
-## install: build then install into $(GOBIN) or $(GOPATH)/bin
-install:
-	go install $(CMD_DIR)
-
-## clean: remove build artifacts
 clean:
-	rm -rf $(BUILD_DIR)
+	@echo "==> Cleaning local workspace targets..."
+	rm -f $(BINARY_NAME)
+	$(GO) clean -cache
+
+help:
+	@echo "Available commands:"
+	@echo "  build       - Build the production binary using default optimizations"
+	@echo "  fast-build  - Build with unsafe hardware optimization overrides (No Bounds Checking)"
+	@echo "  run-fast    - Launch lumen against a path using maximum execution throughput"
+	@echo "  test        - Execute complete package verification suites"
+	@echo "  clean       - Wipe out built execution files and temporary build structures"
