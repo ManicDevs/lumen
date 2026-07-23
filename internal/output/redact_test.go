@@ -1,4 +1,4 @@
-package redact
+package output
 
 import "testing"
 
@@ -8,7 +8,7 @@ func TestSecrets(t *testing.T) {
 	if got == in {
 		t.Fatal("expected secret to be redacted")
 	}
-	if containsSubstr(got, "AQ.Ab8RN6ICUPTuMsp") {
+	if containsStr(got, "AQ.Ab8RN6ICUPTuMsp") {
 		t.Errorf("secret still present in redacted output: %q", got)
 	}
 }
@@ -57,7 +57,7 @@ func TestURLQueryParam(t *testing.T) {
 	}
 }
 
-func containsSubstr(s, substr string) bool {
+func containsStr(s, substr string) bool {
 	return len(s) >= len(substr) && (func() bool {
 		for i := 0; i+len(substr) <= len(s); i++ {
 			if s[i:i+len(substr)] == substr {

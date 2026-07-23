@@ -39,16 +39,6 @@ func TestMinifyCode_StripsCommentsAndBlankLines(t *testing.T) {
 	}
 }
 
-func TestContext_ChatModeReturnsStub(t *testing.T) {
-	got, err := Context("--chat")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(got, "chat session initialized") {
-		t.Errorf("unexpected chat stub content: %q", got)
-	}
-}
-
 func TestContext_SingleFile(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "main.go", "package main\nfunc main() {}\n")
@@ -108,40 +98,6 @@ func TestValidateTargetPath_AcceptsRealFile(t *testing.T) {
 	path := writeFile(t, dir, "ok.go", "package ok\n")
 	if err := ValidateTargetPath(path); err != nil {
 		t.Errorf("unexpected error for valid file: %v", err)
-	}
-}
-
-func TestCreateSnapshot_CopiesFileWithSecurePerms(t *testing.T) {
-	srcDir := t.TempDir()
-	backupDir := t.TempDir()
-	path := writeFile(t, srcDir, "target.go", "package target\n")
-
-	if err := CreateSnapshot(backupDir, path, "BEFORE"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var found bool
-	_ = filepath.Walk(backupDir, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !info.IsDir() && filepath.Base(p) == "target.go" {
-			found = true
-			if info.Mode().Perm() != 0o600 {
-				t.Errorf("expected snapshot file perms 0600, got %v", info.Mode().Perm())
-			}
-		}
-		return nil
-	})
-	if !found {
-		t.Error("expected snapshot copy of target.go to exist")
-	}
-}
-
-func TestCreateSnapshot_MissingTargetIsNoOp(t *testing.T) {
-	backupDir := t.TempDir()
-	if err := CreateSnapshot(backupDir, "/nonexistent/path", "BEFORE"); err != nil {
-		t.Errorf("expected no error for missing target, got: %v", err)
 	}
 }
 

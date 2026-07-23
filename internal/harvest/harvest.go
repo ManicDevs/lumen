@@ -1,17 +1,12 @@
-// Package harvest reads source code from a file or directory, strips
-// comments/blank lines, and builds the context block sent to the LLM. It
-// also handles before/after snapshotting for auditability.
 package harvest
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 )
 
 var reBlankLine = regexp.MustCompile(`^\s*$`)
@@ -91,10 +86,6 @@ func ValidateTargetPath(path string) error {
 // (see languages.go), excluding test files, *-bin files, and common
 // vendor/build/VCS directories.
 func Context(targetPath string) (string, error) {
-	if targetPath == "--chat" {
-		return "Assistant: Standalone chat session initialized.\n", nil
-	}
-
 	if err := ValidateTargetPath(targetPath); err != nil {
 		return "", err
 	}
@@ -176,58 +167,4 @@ func looksLikeText(path string) bool {
 		}
 	}
 	return true
-}
-
-// CreateSnapshot copies targetPath into backupDir under a timestamped,
-// labeled directory ("BEFORE"/"AFTER"). A missing target is silently
-// skipped (e.g. --chat mode has nothing to snapshot).
-func CreateSnapshot(backupDir, targetPath, label string) error {
-	info, err := os.Stat(targetPath)
-	if err != nil {
-		return nil
-	}
-	stamp := time.Now().Format("20060102_150405")
-	dest := filepath.Join(backupDir, fmt.Sprintf("snap_%s_%s", label, stamp))
-	if err := os.MkdirAll(dest, 0o700); err != nil {
-		return fmt.Errorf("harvest: creating snapshot dir: %w", err)
-	}
-	if info.IsDir() {
-		return copyDir(targetPath, filepath.Join(dest, filepath.Base(targetPath)))
-	}
-	return copyFile(targetPath, filepath.Join(dest, filepath.Base(targetPath)))
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
-}
-
-func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, 0o700)
-		}
-		return copyFile(path, target)
-	})
 }

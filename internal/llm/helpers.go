@@ -1,4 +1,4 @@
-package engine
+package llm
 
 import (
 	"encoding/json"
@@ -6,17 +6,8 @@ import (
 	"strings"
 )
 
-// maxAPIErrorMsgLen caps how much of a backend's error text ever reaches
-// the terminal or the returned error chain. Full raw bodies (which can run
-// to several KB of JSON) are for debug logs, not the chat UI.
 const maxAPIErrorMsgLen = 200
 
-// apiErrorMessage turns a backend's raw HTTP error body into a short,
-// human-readable line: "<backend>: <reason> (HTTP <code>)". It understands
-// the common {"error":{"message":"..."}} and {"error":"..."} shapes used by
-// Ollama and OpenAI-compatible servers (e.g. LM Studio). If the body
-// doesn't match a known shape, it falls back to a truncated snippet rather
-// than dumping the whole thing.
 func apiErrorMessage(backend string, statusCode int, body []byte) string {
 	reason := extractErrorReason(body)
 	if reason == "" {
@@ -40,15 +31,12 @@ func extractErrorReason(body []byte) string {
 			return truncate(parsed.Message)
 		}
 	}
-
-	// Some servers nest the string directly under "error".
 	var altShape struct {
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(body, &altShape); err == nil && altShape.Error != "" {
 		return truncate(altShape.Error)
 	}
-
 	trimmed := strings.TrimSpace(string(body))
 	if trimmed == "" {
 		return ""

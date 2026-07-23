@@ -1,13 +1,7 @@
-package engine
+package dataset
 
 import "testing"
 
-// realWorldCourtesyLoop is trimmed from an actual --continuous run
-// (design pipeline topic). Turns 1-2 are substantive elaboration; turns
-// 3, 5, 6, 7 are pure "thank you" / "you're welcome" acknowledgments with
-// no new structured content. Turn 4 restates turn 2's list under a
-// courtesy opener but still carries a numbered breakdown, so it's the
-// boundary case.
 var realWorldCourtesyLoop = []string{
 	"Designing such a system would require extensive consideration of both infrastructure and software components. ### 1. Identify Key Components\n- Storage Layer: Cassandra, S3\n- Data Processing Engine: Kafka, Spark",
 	"Great! You've outlined an excellent plan. ### 7. Data Compression\n- Use LZO or Snappy\n### 8. Load Balancing\n- Implement a load balancer between the Kafka brokers",
@@ -27,7 +21,7 @@ func TestIsLowContent(t *testing.T) {
 		{"structured technical answer", realWorldCourtesyLoop[0], false},
 		{"courtesy opener but has heading", realWorldCourtesyLoop[1], false},
 		{"pure thanks, no structure", realWorldCourtesyLoop[2], true},
-		{"you're welcome with inline numbered list, no heading", realWorldCourtesyLoop[3], true},
+		{"you're welcome with inline list, no heading", realWorldCourtesyLoop[3], true},
 		{"thanks + keep up the good work", realWorldCourtesyLoop[4], true},
 		{"glad to help + feel free to ask", realWorldCourtesyLoop[5], true},
 		{"empty string", "", false},
@@ -48,16 +42,13 @@ func TestIsDegenerateRepeat_CourtesyLoop(t *testing.T) {
 	for i, resp := range realWorldCourtesyLoop {
 		datapoints = append(datapoints, Datapoint{Prompt: "p", Response: resp})
 		if isDegenerateRepeat(datapoints) {
-			stoppedAt = i + 1 // 1-indexed turn number
+			stoppedAt = i + 1
 			break
 		}
 	}
 	if stoppedAt == -1 {
 		t.Fatal("expected the courtesy loop to be detected, but it ran through all turns")
 	}
-	// Should catch it at turn 4 (first point where two low-content turns
-	// are adjacent: turn 3 and turn 4), not run all the way to turn 7 like
-	// the real production run did before this detector existed.
 	if stoppedAt != 4 {
 		t.Errorf("stopped at turn %d, want turn 4", stoppedAt)
 	}
@@ -76,7 +67,7 @@ func TestIsDegenerateRepeat_SubstantiveExchangeNotFlagged(t *testing.T) {
 func TestIsDegenerateRepeat_ExactDuplicate(t *testing.T) {
 	datapoints := []Datapoint{
 		{Prompt: "p1", Response: "same text here"},
-		{Prompt: "p2", Response: "same   text  here"}, // whitespace differs, content doesn't
+		{Prompt: "p2", Response: "same   text  here"},
 	}
 	if !isDegenerateRepeat(datapoints) {
 		t.Error("whitespace-normalized identical responses should be flagged")
@@ -88,6 +79,6 @@ func TestIsDegenerateRepeat_TooFewDatapoints(t *testing.T) {
 		t.Error("no datapoints should never be flagged")
 	}
 	if isDegenerateRepeat([]Datapoint{{Prompt: "p", Response: "thank you for this"}}) {
-		t.Error("a single datapoint should never be flagged, regardless of content")
+		t.Error("a single datapoint should never be flagged")
 	}
 }

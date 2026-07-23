@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"gitlab.torproject.org/cerberus-droid/lumen/internal/dotenv"
+	"gitlab.torproject.org/cerberus-droid/lumen/internal/env"
 )
 
 // ---------------------------------------------------------------------
@@ -80,7 +80,7 @@ func Load(logger *slog.Logger) (Config, error) {
 	envPath := findDotEnv()
 	warnOnLooseDotEnvPerms(envPath, logger)
 
-	parsed, err := dotenv.Load(envPath)
+	parsed, err := env.LoadDotenv(envPath)
 	if err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
