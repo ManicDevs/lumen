@@ -188,9 +188,24 @@ func run() int {
 
 	runExchange := func() {
 		start := time.Now()
-		name, reply, err := sendMessage(context.Background(), hist.Snapshot(), func(tok string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		tokenChan := make(chan string, 100)
+		var reply string
+		var name string
+		var err error
+
+		go func() {
+			defer close(tokenChan)
+			name, reply, err = sendMessage(ctx, hist.Snapshot(), func(tok string) {
+				tokenChan <- tok
+			})
+		}()
+
+		for tok := range tokenChan {
 			fmt.Print(tok)
-		})
+		}
 		dur := time.Since(start)
 		if err != nil {
 			fmt.Printf("\nError: %v\n", err)

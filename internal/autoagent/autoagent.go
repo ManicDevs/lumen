@@ -535,3 +535,14 @@ func Run(
 	}
 	return errors.New("max iterations reached")
 }
+
+// ValidateCommand inspects dynamic script blocks for obfuscation arrays before system fork allocation
+func ValidateCommand(cmd string) error {
+	trimmed := strings.TrimSpace(cmd)
+	if strings.Contains(trimmed, "&&") || strings.Contains(trimmed, "||") || strings.Contains(trimmed, ";") {
+		if strings.Contains(trimmed, "sudo") || strings.Contains(trimmed, "rm ") {
+			return fmt.Errorf("dangerous command chaining permutation blocked by agent policy")
+		}
+	}
+	return nil
+}

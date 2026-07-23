@@ -173,7 +173,7 @@ func (l *LocalEngine) sendOllama(ctx context.Context, history []ChatMessage, onT
 		}()
 
 		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+		scanner.Buffer(make([]byte, 0, 64*1024), 512*1024)
 		for scanner.Scan() {
 			idle.Reset(l.idleTimeout)
 			if ctx.Err() != nil {
@@ -284,7 +284,7 @@ func (l *LocalEngine) sendOpenAICompat(ctx context.Context, history []ChatMessag
 		}()
 
 		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+		scanner.Buffer(make([]byte, 0, 64*1024), 512*1024)
 		for scanner.Scan() {
 			idle.Reset(l.idleTimeout)
 			if ctx.Err() != nil {
