@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"gitlab.torproject.org/cerberus-droid/lumen/internal/version"
 )
 
 // Flags represents the parsed command-line flags and positional arguments.
@@ -34,6 +36,9 @@ func ParseFlags(args []string) Flags {
 		switch args[i] {
 		case "--help", "-h":
 			PrintUsage()
+			os.Exit(0)
+		case "--version":
+			fmt.Println(version.String())
 			os.Exit(0)
 		case "--auto":
 			f.AutoMode = true
@@ -83,4 +88,5 @@ func PrintUsage() {
 	fmt.Fprintf(os.Stderr, "Usage (Train Mode):  %s --train | %s --train-all\n", progName, progName)
 	fmt.Fprintf(os.Stderr, "Usage (Dataset Mode): %s --dataset-init\n", progName)
 	fmt.Fprintf(os.Stderr, "Usage (Help):        %s --help\n", progName)
+	fmt.Fprintf(os.Stderr, "Usage (Version):     %s --version\n", progName)
 }

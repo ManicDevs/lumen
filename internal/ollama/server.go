@@ -105,8 +105,8 @@ func (s *Server) FindExecutable() string {
 
 // ServerStartOptions configure how the Ollama serve subprocess is launched.
 type ServerStartOptions struct {
-	Env       []string    // extra environment variables
-	LogWriter io.Writer   // where to redirect stdout/stderr (nil = discard)
+	Env       []string  // extra environment variables
+	LogWriter io.Writer // where to redirect stdout/stderr (nil = discard)
 }
 
 // Start finds the ollama binary, starts it as a subprocess with "serve",

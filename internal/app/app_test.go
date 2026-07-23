@@ -61,9 +61,9 @@ func TestParseFlags_AutoSandbox(t *testing.T) {
 
 func TestParseFlags_TrainAndDataset(t *testing.T) {
 	tests := []struct {
-		args     []string
-		name     string
-		check    func(Flags) bool
+		args  []string
+		name  string
+		check func(Flags) bool
 	}{
 		{[]string{"--train"}, "--train", func(f Flags) bool { return f.Train && !f.TrainAll }},
 		{[]string{"--train-all"}, "--train-all", func(f Flags) bool { return f.Train && f.TrainAll }},
@@ -97,4 +97,11 @@ func TestParseFlags_HelpExits(t *testing.T) {
 
 func TestPrintUsage_DoesNotPanic(t *testing.T) {
 	PrintUsage()
+}
+
+func TestParseFlags_VersionExits(t *testing.T) {
+	if os.Getenv("TEST_VERSION_EXIT") == "1" {
+		ParseFlags([]string{"--version"})
+		return
+	}
 }

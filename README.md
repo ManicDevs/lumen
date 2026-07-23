@@ -151,43 +151,68 @@ lumen/
 
 ---
 
+## Proof: Pure-Go Ollama Framework in Action
+
+No `ollama` binary required — Lumen's native client talks directly to the
+Ollama server process via HTTP, using nothing but the Go standard library:
+
+```
+$ go test ./internal/ollama/... -run TestLiveOllamaClient -v
+
+  server version: 0.31.1
+  models (2):
+    - qwen2.5-coder:3b (1840 MB)
+    - qwen2.5-coder:1.5b (940 MB)
+  health: OK
+  chat reply: Yes, Native Ollama framework works.
+--- PASS: TestLiveOllamaClient (5.36s)
+```
+
+Every API call — `Version`, `List`, `Health`, `Chat` — goes through
+`internal/ollama/`, a **zero-dependency, pure-Go, purpose-built client**
+with zero lines of CGo, no vendored llama.cpp, and no external SDKs.
+The `ollama` binary on the system is only needed as the server; the client
+code that talks to it is 100% native Go.
+
+---
+
 ## Quick Start
 
 ```bash
 # Build (no dependencies to download — just Go 1.25+)
-go build -o lumen ./cmd/lumen
+go build -o bin/lumen ./cmd/lumen
 
 # Review a project (harvests source → interactive chat)
-./lumen /path/to/your/project/
+./bin/lumen /path/to/your/project/
 
 # Plain chat session
-./lumen --chat
+./bin/lumen --chat
 
 # Autonomous agent
-./lumen --auto "add a health-check endpoint and run the tests" --live-output
+./bin/lumen --auto "add a health-check endpoint and run the tests" --live-output
 
 # Self-play dataset generation
-./lumen --chat --easter-egg --continuous --pipe-dataset
+./bin/lumen --chat --easter-egg --continuous --pipe-dataset
 
 # Fine-tune from collected datasets
-./lumen --train
+./bin/lumen --train
 
 # See all options
-./lumen --help
+./bin/lumen --help
 ```
 
 ---
 
 ## Modes
 
-### Code Mode (`lumen <path>`)
+### Code Mode (`./bin/lumen <path>`)
 
 Harvests a file or directory of source files (Go, Python, JS/TS, Rust, Java,
 C/C++, and 15+ more — see `internal/harvest/languages.go`), strips comments,
 and opens an interactive chat with the code as context.
 
 ```
-$ ./lumen ./myproject/
+$ ./bin/lumen ./myproject/
 Lumen Code Mode: harvested ./myproject
 
 [Lumen]: (first exchange generated automatically)
@@ -195,18 +220,18 @@ Lumen Code Mode: harvested ./myproject
 ...
 ```
 
-### Chat Mode (`lumen --chat`)
+### Chat Mode (`./bin/lumen --chat`)
 
 A plain interactive chat with no file context. Supports `/auto <goal>` to
 hand control to the autonomous agent.
 
-### Auto Mode (`lumen --auto <goal>` [flags])
+### Auto Mode (`./bin/lumen --auto <goal>` [flags])
 
 Go-direct autonomous mode (no REPL). The agent iterates until `AUTO_DONE` or
 the iteration cap:
 
 ```bash
-lumen --auto "refactor the config loader, 10 iterations" --live-output
+./bin/lumen --auto "refactor the config loader, 10 iterations" --live-output
 ```
 
 | Flag | Effect |
@@ -215,15 +240,15 @@ lumen --auto "refactor the config loader, 10 iterations" --live-output
 | `--live-output` | Stream LLM tokens to stdout in real time |
 | `--auto-sandbox` | Enable sandbox restrictions (denylist + path confinement) |
 
-### Dataset Mode (`lumen --easter-egg`, `lumen --train`)
+### Dataset Mode (`./bin/lumen --easter-egg`, `./bin/lumen --train`)
 
 Self-play data generation for building fine-tuning datasets:
 
 ```bash
-lumen --dataset-init                         # create repo structure
-lumen --easter-egg --pipe-dataset            # generate + commit frames
-lumen --train                                # fine-tune from fresh commits
-lumen --train-all                            # fine-tune from all commits
+./bin/lumen --dataset-init                         # create repo structure
+./bin/lumen --easter-egg --pipe-dataset            # generate + commit frames
+./bin/lumen --train                                # fine-tune from fresh commits
+./bin/lumen --train-all                            # fine-tune from all commits
 ```
 
 ---
@@ -327,22 +352,26 @@ environment variables always take precedence.
 
 ---
 
-## Tests
+## Development
 
 ```bash
-go test ./... -count=1
+make build   # build bin/lumen with version injection
+make test    # run all tests
+make race    # tests with race detector
+make cover   # HTML coverage report → build/cover.html
+make vet     # go vet ./...
+make lint    # golangci-lint (requires golangci-lint)
 ```
 
-94 tests across 10 packages — every line of the Ollama framework, agent loop,
-session management, config validation, dataset operations, env parsing,
-output formatting, retry logic, and LLM engine adapters.
+CI (GitHub Actions) runs lint, build, vet, test, race, and coverage on
+every push and pull request to `main`.
 
 ```bash
+# Manual checks
+go test -count=1 -race ./...
 go vet ./...
-gofmt -l .
+bin/lumen --version
 ```
-
-CI runs build, vet, format check, and the full suite on every push.
 
 ---
 

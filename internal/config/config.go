@@ -146,14 +146,14 @@ func Load(logger *slog.Logger) (Config, error) {
 }
 
 var (
-	errEmptyModel   = fmt.Errorf("OLLAMA_MODEL must not be empty")
-	errEmptyHost    = fmt.Errorf("OLLAMA_HOST must not be empty")
-	errMaxRetries   = fmt.Errorf("MAX_RETRIES must be >= 1 and <= 100")
-	errNumCtx       = fmt.Errorf("OLLAMA_NUM_CTX must be >= 256 and <= 131072")
-	errTimeout      = fmt.Errorf("REQUEST_TIMEOUT_SECONDS must be positive and <= 3600")
-	errInvalidURL   = fmt.Errorf("OLLAMA_HOST must be a valid HTTP or HTTPS URL")
-	errLogFormat    = fmt.Errorf("LOG_FORMAT must be 'text' or 'json'")
-	errLogLevel     = fmt.Errorf("LOG_LEVEL must be one of: debug, info, warn, error")
+	errEmptyModel = fmt.Errorf("OLLAMA_MODEL must not be empty")
+	errEmptyHost  = fmt.Errorf("OLLAMA_HOST must not be empty")
+	errMaxRetries = fmt.Errorf("MAX_RETRIES must be >= 1 and <= 100")
+	errNumCtx     = fmt.Errorf("OLLAMA_NUM_CTX must be >= 256 and <= 131072")
+	errTimeout    = fmt.Errorf("REQUEST_TIMEOUT_SECONDS must be positive and <= 3600")
+	errInvalidURL = fmt.Errorf("OLLAMA_HOST must be a valid HTTP or HTTPS URL")
+	errLogFormat  = fmt.Errorf("LOG_FORMAT must be 'text' or 'json'")
+	errLogLevel   = fmt.Errorf("LOG_LEVEL must be one of: debug, info, warn, error")
 )
 
 func validateHost(host string) error {

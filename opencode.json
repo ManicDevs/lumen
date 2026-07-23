@@ -1,0 +1,103 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "logLevel": "INFO",
+
+  "instructions": ["AGENTS.md", "CONTRIBUTING.md", "CHANGELOG.md"],
+
+  "references": {
+    "ollama-api": {
+      "repository": "ollama/ollama",
+      "branch": "main",
+      "description": "Use for Ollama REST API endpoint specs and error codes"
+    },
+    "godocs": {
+      "repository": "golang/go",
+      "branch": "master",
+      "description": "Use for Go stdlib API references and implementation details"
+    }
+  },
+
+  "lsp": {
+    "go": {
+      "command": ["gopls"],
+      "initialization": {
+        "formatting.gofmt": true,
+        "formatting.local": "gitlab.torproject.org/cerberus-droid/lumen",
+        "ui.completion.usePlaceholders": true,
+        "ui.semanticTokens": true,
+        "ui.codelenses": {
+          "generate": true,
+          "test": true,
+          "tidy": true
+        },
+        "ui.diagnostic.staticcheck": true,
+        "analyses": {
+          "nilness": true,
+          "unusedparams": true,
+          "unusedwrite": true,
+          "useany": true
+        }
+      }
+    }
+  },
+
+  "mcp": {
+    "github": {
+      "type": "remote",
+      "url": "https://api.github.com",
+      "enabled": false,
+      "headers": {
+        "Authorization": "Bearer {env:GITHUB_TOKEN}",
+        "User-Agent": "opencode-lumen"
+      }
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp"],
+      "enabled": false
+    }
+  },
+
+  "plugin": [],
+
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "git *": "allow",
+      "go *": "allow",
+      "make *": "allow",
+      "mkdir *": "allow",
+      "rm -rf bin*": "allow",
+      "rm -rf build*": "allow",
+      "*": "ask"
+    },
+    "external_directory": {
+      "*": "allow"
+    }
+  },
+
+  "agent": {
+    "review": {
+      "description": "Reviews Go code for style, correctness, and enterprise conventions.",
+      "mode": "subagent",
+      "permission": { "read": "allow", "edit": "deny" },
+      "prompt": "You are a strict Go code reviewer. Check for: missing godoc comments on exported symbols, error wrapping without %w, missing nil guards, unused imports, magic numbers, missing context cancellation checks, race conditions, and deviation from Go stdlib style. Output a numbered list of findings with file:line references."
+    },
+    "test-writer": {
+      "description": "Writes table-driven Go tests following existing patterns in the codebase.",
+      "mode": "subagent",
+      "permission": { "read": "allow", "edit": "allow" },
+      "prompt": "You are a Go test specialist. Write table-driven tests following the patterns in this codebase. Use subtests with t.Run. Always include: happy path, error cases, edge cases (nil, empty, zero). Name test functions TestXxx. Place tests in the same package (_test.go in a test package for external tests). Use httptest for HTTP-dependent tests."
+    }
+  },
+
+  "compaction": {
+    "auto": true,
+    "tail_turns": 10
+  },
+
+  "tool_output": {
+    "max_lines": 500,
+    "max_bytes": 32768
+  }
+}

@@ -13,13 +13,13 @@ import (
 )
 
 type LocalEngine struct {
-	client      *ollama.Client
-	model       string
+	client       *ollama.Client
+	model        string
 	systemPrompt string
-	numCtx      int
-	idleTimeout time.Duration
-	logger      *slog.Logger
-	retryCfg    retry.Config
+	numCtx       int
+	idleTimeout  time.Duration
+	logger       *slog.Logger
+	retryCfg     retry.Config
 }
 
 func NewLocalEngine(host, model, systemPrompt string, numCtx int, idleTimeout time.Duration, retryCfg retry.Config, logger *slog.Logger) *LocalEngine {

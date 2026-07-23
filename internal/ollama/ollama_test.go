@@ -285,9 +285,9 @@ func TestCopy(t *testing.T) {
 func TestShow(t *testing.T) {
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, ShowResponse{
-			Modelfile: "FROM llama3.2",
+			Modelfile:  "FROM llama3.2",
 			Parameters: "temperature 0.7",
-			Template: "{{ .Prompt }}",
+			Template:   "{{ .Prompt }}",
 		})
 	}))
 	defer srv.Close()

@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "golang.go",
+    "editorconfig.editorconfig",
+    "github.vscode-github-actions",
+    "eamodio.gitlens",
+    "streetsidesoftware.code-spell-checker",
+    "tamasfe.even-better-toml",
+    "aaron-bond.better-comments",
+    "wayou.vscode-todo-highlight"
+  ]
+}

@@ -8,12 +8,12 @@ type Message struct {
 
 // Options holds generation parameters passed to the model.
 type Options struct {
-	NumCtx      int     `json:"num_ctx,omitempty"`
-	NumPredict  int     `json:"num_predict,omitempty"`
-	Seed        int     `json:"seed,omitempty"`
-	Temperature float64 `json:"temperature,omitempty"`
-	TopP        float64 `json:"top_p,omitempty"`
-	TopK        int     `json:"top_k,omitempty"`
+	NumCtx      int      `json:"num_ctx,omitempty"`
+	NumPredict  int      `json:"num_predict,omitempty"`
+	Seed        int      `json:"seed,omitempty"`
+	Temperature float64  `json:"temperature,omitempty"`
+	TopP        float64  `json:"top_p,omitempty"`
+	TopK        int      `json:"top_k,omitempty"`
 	Stop        []string `json:"stop,omitempty"`
 }
 
@@ -58,10 +58,10 @@ type ChatStreamChunk struct {
 
 // GenerateRequest is the request body for POST /api/generate.
 type GenerateRequest struct {
-	Model   string `json:"model"`
-	Prompt  string `json:"prompt"`
-	System  string `json:"system,omitempty"`
-	Stream  bool   `json:"stream"`
+	Model   string  `json:"model"`
+	Prompt  string  `json:"prompt"`
+	System  string  `json:"system,omitempty"`
+	Stream  bool    `json:"stream"`
 	Options Options `json:"options,omitempty"`
 }
 
@@ -129,9 +129,9 @@ type CopyRequest struct {
 
 // PullRequest is the request body for POST /api/pull.
 type PullRequest struct {
-	Model   string `json:"model"`
-	Stream  bool   `json:"stream"`
-	Insecure bool  `json:"insecure,omitempty"`
+	Model    string `json:"model"`
+	Stream   bool   `json:"stream"`
+	Insecure bool   `json:"insecure,omitempty"`
 }
 
 // PullProgressChunk is an NDJSON line from a streaming pull operation.
@@ -144,9 +144,9 @@ type PullProgressChunk struct {
 
 // PushRequest is the request body for POST /api/push.
 type PushRequest struct {
-	Model   string `json:"model"`
-	Stream  bool   `json:"stream"`
-	Insecure bool  `json:"insecure,omitempty"`
+	Model    string `json:"model"`
+	Stream   bool   `json:"stream"`
+	Insecure bool   `json:"insecure,omitempty"`
 }
 
 // CreateRequest is the request body for POST /api/create.

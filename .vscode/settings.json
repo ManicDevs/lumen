@@ -1,0 +1,74 @@
+{
+  "go.useLanguageServer": true,
+  "gopls": {
+    "formatting.gofmt": true,
+    "formatting.local": "gitlab.torproject.org/cerberus-droid/lumen",
+    "ui.completion.usePlaceholders": true,
+    "ui.semanticTokens": true,
+    "ui.codelenses": {
+      "generate": true,
+      "gc_details": false,
+      "test": true,
+      "tidy": true,
+      "upgrade_dependency": true,
+      "vendor": true
+    },
+    "ui.diagnostic.staticcheck": true,
+    "ui.diagnostic.annotations": true,
+    "analyses": {
+      "fieldalignment": false,
+      "nilness": true,
+      "unusedparams": true,
+      "unusedwrite": true,
+      "useany": true
+    },
+    "internal.completionBudget": "100ms",
+    "verboseOutput": false
+  },
+  "go.formatTool": "gofmt",
+  "go.lintTool": "golangci-lint",
+  "go.lintOnSave": "workspace",
+  "go.vetOnSave": "workspace",
+  "go.testFlags": ["-count=1"],
+  "go.testTimeout": "120s",
+  "go.coverOnSingleTest": true,
+  "go.coverOnSingleTestFile": true,
+  "go.coverageDecorator": {
+    "type": "gutter",
+    "coveredHighlightColor": "rgba(64,128,64,0.3)",
+    "uncoveredHighlightColor": "rgba(128,64,64,0.3)",
+    "coveredGutterStyle": "blockgreen",
+    "uncoveredGutterStyle": "blockred"
+  },
+  "go.delveConfig": {
+    "dlvLoadConfig": {
+      "followPointers": true,
+      "maxVariableRecurse": 1,
+      "maxStringLen": 512,
+      "maxArrayValues": 64,
+      "maxStructFields": -1
+    }
+  },
+  "files.exclude": {
+    "bin/": true,
+    "build/": true
+  },
+  "files.associations": {
+    ".env.example": "env",
+    "go.mod": "go"
+  },
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "editor.rulers": [100, 120],
+  "editor.renderWhitespace": "selection",
+  "editor.bracketPairColorization.enabled": true,
+  "diffEditor.codeLens": true,
+  "search.exclude": {
+    "bin/": true,
+    "build/": true
+  },
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true
+}

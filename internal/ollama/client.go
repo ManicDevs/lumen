@@ -14,17 +14,17 @@ import (
 )
 
 const (
-	chatEndpoint    = "/api/chat"
+	chatEndpoint     = "/api/chat"
 	generateEndpoint = "/api/generate"
-	tagsEndpoint    = "/api/tags"
-	pullEndpoint    = "/api/pull"
-	pushEndpoint    = "/api/push"
-	deleteEndpoint  = "/api/delete"
-	copyEndpoint    = "/api/copy"
-	showEndpoint    = "/api/show"
-	createEndpoint  = "/api/create"
-	embedEndpoint   = "/api/embed"
-	psEndpoint      = "/api/ps"
+	tagsEndpoint     = "/api/tags"
+	pullEndpoint     = "/api/pull"
+	pushEndpoint     = "/api/push"
+	deleteEndpoint   = "/api/delete"
+	copyEndpoint     = "/api/copy"
+	showEndpoint     = "/api/show"
+	createEndpoint   = "/api/create"
+	embedEndpoint    = "/api/embed"
+	psEndpoint       = "/api/ps"
 )
 
 // Client is an HTTP client for the Ollama REST API. Create one with

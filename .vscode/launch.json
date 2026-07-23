@@ -1,0 +1,73 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Lumen (with path)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/lumen",
+      "args": ["${input:targetPath}"],
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug Lumen (chat mode)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/lumen",
+      "args": ["--chat"],
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug Lumen (auto mode)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/cmd/lumen",
+      "args": ["--auto", "${input:autoGoal}"],
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug Lumen Tests",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}",
+      "args": ["-count=1"],
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug Package Tests",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${input:testPackage}",
+      "args": ["-count=1", "-v"],
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "targetPath",
+      "type": "promptString",
+      "description": "Target file or directory path to analyse"
+    },
+    {
+      "id": "autoGoal",
+      "type": "promptString",
+      "description": "Autonomous agent goal description"
+    },
+    {
+      "id": "testPackage",
+      "type": "promptString",
+      "description": "Package path (e.g. ./internal/ollama/...)",
+      "default": "./..."
+    }
+  ]
+}
