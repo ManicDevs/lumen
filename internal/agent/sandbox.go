@@ -32,6 +32,8 @@ var (
 	defaultSandboxPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
 
+// matchDangerousRM detects recursive-force rm commands that target system
+// roots (/), home directories (~, $HOME), or glob patterns (*).
 func matchDangerousRM(cmd string) bool {
 	tokens := strings.Fields(cmd)
 	for i, tok := range tokens {
@@ -69,6 +71,9 @@ func matchDangerousRM(cmd string) bool {
 	return false
 }
 
+// matchDenylist checks a command against the sandbox denylist. Returns true
+// if the command matches any dangerous pattern (sudo, dd to block devices,
+// fork bombs, remote pipe-to-shell, etc.).
 func matchDenylist(cmd string) bool {
 	for _, pattern := range denylistPatterns {
 		if pattern.MatchString(cmd) {
@@ -78,6 +83,8 @@ func matchDenylist(cmd string) bool {
 	return matchDangerousRM(cmd)
 }
 
+// resolveWritePath joins workDir and target, then verifies the result is
+// within the sandbox (no path traversal outside workDir).
 func resolveWritePath(workDir, target string) (string, error) {
 	target = SanitizeFilename(target)
 	if placeholderPathRe.MatchString(target) {
@@ -98,6 +105,7 @@ func resolveWritePath(workDir, target string) (string, error) {
 	return absFinal, nil
 }
 
+// writeFile writes content to path, creating parent directories as needed.
 func writeFile(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -112,6 +120,9 @@ func shPath() string {
 	return "/bin/sh"
 }
 
+// runCommand executes cmdStr via the system shell. When sandbox is true the
+// environment is restricted and the command is checked against the denylist
+// before execution.
 func runCommand(ctx context.Context, cmdStr, workDir string, sandbox bool) (string, error) {
 	if sandbox && matchDenylist(cmdStr) {
 		return "COMMAND REFUSED: sandbox restriction", nil

@@ -11,7 +11,11 @@ import (
 	"time"
 )
 
+// trainedModelName is the name of the custom model produced by RunTrain.
 const trainedModelName = "lumen-tuned"
+
+// maxTrainMessages limits the number of messages used when training from
+// fresh (unarchived) commits alone.
 const maxTrainMessages = 200
 
 type ollamaCreateRequest struct {
@@ -67,6 +71,9 @@ func createOllamaModel(host, name, modelfile string) error {
 	return nil
 }
 
+// RunTrain creates a custom Ollama model (lumen-tuned) from collected
+// dataset commits. When useAll is false only fresh (unarchived) commits are
+// used; when true all commits including previously trained ones are included.
 func RunTrain(host, baseModel string, useAll bool) error {
 	commitsDir := filepath.Join(DatasetRoot, "commits")
 	trainedDir := filepath.Join(commitsDir, "trained")

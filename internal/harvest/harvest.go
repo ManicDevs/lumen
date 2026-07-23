@@ -28,12 +28,23 @@ func commentRegexesFor(prefix string) (*regexp.Regexp, *regexp.Regexp) {
 	return full, trailing
 }
 
+// MaxFileSize is the maximum file size (in bytes) we are willing to read
+// into memory during MinifyCode. Files larger than this return an error.
+const MaxFileSize = 16 * 1024 * 1024 // 16 MiB
+
 // MinifyCode strips full-line and trailing line comments (using whatever
 // comment token matches path's language — "//", "#", "--", etc.) plus
 // blank lines from a file, preserving indentation on remaining lines. For
 // an unrecognized extension, or a language with no safe single-line
 // comment token, only blank lines are stripped.
 func MinifyCode(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("harvest: stat %s: %w", path, err)
+	}
+	if info.Size() > MaxFileSize {
+		return "", fmt.Errorf("harvest: %s is %d bytes (max %d)", path, info.Size(), MaxFileSize)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("harvest: reading %s: %w", path, err)

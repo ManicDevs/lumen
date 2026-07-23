@@ -1,3 +1,5 @@
+// Package output provides terminal styling, structured logging, secret
+// redaction, and a spinner widget for CLI progress indication.
 package output
 
 import (
@@ -7,6 +9,8 @@ import (
 	"strings"
 )
 
+// NewLogger creates a slog.Logger that writes to w. Format can be "text"
+// (default) or "json". Level can be "debug", "info", "warn", or "error".
 func NewLogger(w io.Writer, format string, level string) *slog.Logger {
 	if w == nil {
 		w = os.Stderr

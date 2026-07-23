@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// fileBlock represents a single fenced file block extracted from an LLM reply.
 type fileBlock struct {
 	filename string
 	content  string
@@ -31,6 +32,9 @@ func containsStr(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
+// parseFileBlocks extracts fenced file blocks from the LLM reply.
+// A file block is a fenced code block whose opening fence starts with
+// ```file:filename or ```go .
 func parseFileBlocks(reply string) []fileBlock {
 	var blocks []fileBlock
 	lines := strings.Split(reply, "\n")
@@ -63,6 +67,9 @@ func parseFileBlocks(reply string) []fileBlock {
 	return blocks
 }
 
+// parseRunBlocks extracts fenced shell-command blocks from the LLM reply.
+// A run block is a fenced code block whose opening fence is
+// ```run, ```sh, or ```bash .
 func parseRunBlocks(reply string) []string {
 	var blocks []string
 	lines := strings.Split(reply, "\n")
@@ -91,6 +98,8 @@ func parseRunBlocks(reply string) []string {
 	return blocks
 }
 
+// detectMalformedAttempts scans the reply for common structural issues such
+// as unclosed code fences or mismatched open/close block counts.
 func detectMalformedAttempts(reply string) []string {
 	var issues []string
 	fences := strings.Count(reply, fence)
@@ -124,6 +133,9 @@ func detectMalformedAttempts(reply string) []string {
 	return issues
 }
 
+// SanitizeFilename normalizes a filename extracted from a fence header:
+// bare extensions like ".go" or "go" become "main.go", and relative
+// path templates are left unchanged except for trimming whitespace.
 func SanitizeFilename(filename string) string {
 	base := trimSpace(filename)
 	if base == ".go" || base == "go" {

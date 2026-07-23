@@ -5,10 +5,12 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"gitlab.torproject.org/cerberus-droid/lumen/internal/env"
@@ -143,19 +145,69 @@ func Load(logger *slog.Logger) (Config, error) {
 	return cfg, nil
 }
 
-// Validate returns an error if any required or malformed values are present.
+var (
+	errEmptyModel   = fmt.Errorf("OLLAMA_MODEL must not be empty")
+	errEmptyHost    = fmt.Errorf("OLLAMA_HOST must not be empty")
+	errMaxRetries   = fmt.Errorf("MAX_RETRIES must be >= 1 and <= 100")
+	errNumCtx       = fmt.Errorf("OLLAMA_NUM_CTX must be >= 256 and <= 131072")
+	errTimeout      = fmt.Errorf("REQUEST_TIMEOUT_SECONDS must be positive and <= 3600")
+	errInvalidURL   = fmt.Errorf("OLLAMA_HOST must be a valid HTTP or HTTPS URL")
+	errLogFormat    = fmt.Errorf("LOG_FORMAT must be 'text' or 'json'")
+	errLogLevel     = fmt.Errorf("LOG_LEVEL must be one of: debug, info, warn, error")
+)
+
+func validateHost(host string) error {
+	if host == "" {
+		return errEmptyHost
+	}
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		return errInvalidURL
+	}
+	if _, err := url.Parse(host); err != nil {
+		return fmt.Errorf("OLLAMA_HOST parse error: %w", err)
+	}
+	return nil
+}
+
+func validateLogLevel(level string) error {
+	switch strings.ToLower(level) {
+	case "debug", "info", "warn", "warning", "error":
+		return nil
+	default:
+		return errLogLevel
+	}
+}
+
+func validateLogFormat(format string) error {
+	switch strings.ToLower(format) {
+	case "text", "json":
+		return nil
+	default:
+		return errLogFormat
+	}
+}
+
 func (c Config) Validate() error {
 	if c.OllamaModel == "" {
-		return fmt.Errorf("OLLAMA_MODEL must not be empty")
+		return errEmptyModel
 	}
-	if c.MaxRetries < 1 {
-		return fmt.Errorf("MAX_RETRIES must be >= 1")
+	if err := validateHost(c.OllamaHost); err != nil {
+		return err
 	}
-	if c.OllamaNumCtx < 1 {
-		return fmt.Errorf("OLLAMA_NUM_CTX must be >= 1")
+	if c.MaxRetries < 1 || c.MaxRetries > 100 {
+		return errMaxRetries
 	}
-	if c.RequestTimeout <= 0 {
-		return fmt.Errorf("REQUEST_TIMEOUT_SECONDS must be positive")
+	if c.OllamaNumCtx < 256 || c.OllamaNumCtx > 131072 {
+		return errNumCtx
+	}
+	if c.RequestTimeout <= 0 || c.RequestTimeout > time.Hour {
+		return errTimeout
+	}
+	if err := validateLogFormat(c.LogFormat); err != nil {
+		return err
+	}
+	if err := validateLogLevel(c.LogLevel); err != nil {
+		return err
 	}
 	return nil
 }

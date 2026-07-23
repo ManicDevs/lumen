@@ -1,3 +1,9 @@
+// Package dataset manages a lightweight, file-based dataset repository for
+// collecting and curating LLM interaction frames from self-play generation
+// sessions. Each session produces a "commit" of datapoints stored as JSON
+// under data/datasets/commits/, with a ref pointer tracking the latest
+// commit. The package also exposes RunTrain to produce a customised Ollama
+// model from collected commits.
 package dataset
 
 import (
@@ -93,6 +99,10 @@ func writeCommit(commitsDir, refsPath, model string, datapoints []Datapoint) (st
 	return commitID, nil
 }
 
+// RunGenerate starts a self-play generation session. When cont is true the
+// model's own output is fed back as the next prompt (continuous chaining). If
+// pipe is true, each completed frame set is committed to the dataset
+// repository.
 func RunGenerate(model, host string, cont, pipe bool, topic string) error {
 	if topic == "" {
 		topic = DefaultSeedTopics[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(DefaultSeedTopics))]

@@ -10,6 +10,7 @@ import (
 var isTTY = detectTTY()
 var colorEnabled = isTTY && os.Getenv("NO_COLOR") == ""
 
+// detectTTY reports whether stdout is a character device (true terminal).
 func detectTTY() bool {
 	info, err := os.Stdout.Stat()
 	if err != nil {
@@ -18,6 +19,8 @@ func detectTTY() bool {
 	return info.Mode()&os.ModeCharDevice != 0
 }
 
+// TTY reports whether stdout is a terminal. Used by Spinner to decide
+// whether to show animated output.
 var TTY = isTTY
 
 const (
@@ -28,6 +31,7 @@ const (
 	codeRed   = "\033[31m"
 )
 
+// wrap applies an ANSI escape code around s if color is enabled.
 func wrap(code, s string) string {
 	if !colorEnabled || s == "" {
 		return s
@@ -35,10 +39,17 @@ func wrap(code, s string) string {
 	return code + s + codeReset
 }
 
+// Bold returns s wrapped in ANSI bold escape codes (no-op if !colorEnabled).
 func Bold(s string) string { return wrap(codeBold, s) }
-func Dim(s string) string  { return wrap(codeDim, s) }
+
+// Dim returns s wrapped in ANSI dim escape codes.
+func Dim(s string) string { return wrap(codeDim, s) }
+
+// Cyan returns s wrapped in ANSI cyan escape codes.
 func Cyan(s string) string { return wrap(codeCyan, s) }
-func Red(s string) string  { return wrap(codeRed, s) }
+
+// Red returns s wrapped in ANSI red escape codes.
+func Red(s string) string { return wrap(codeRed, s) }
 
 type Spinner struct {
 	stop chan struct{}
@@ -48,6 +59,8 @@ type Spinner struct {
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
+// NewSpinner starts a terminal spinner with the given label. It is a no-op
+// when stdout is not a terminal.
 func NewSpinner(label string) *Spinner {
 	s := &Spinner{stop: make(chan struct{}), done: make(chan struct{})}
 	if !TTY {
@@ -73,6 +86,7 @@ func NewSpinner(label string) *Spinner {
 	return s
 }
 
+// Stop terminates the spinner and restores the cursor line.
 func (s *Spinner) Stop() {
 	s.once.Do(func() { close(s.stop) })
 	<-s.done

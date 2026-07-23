@@ -11,6 +11,9 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
+// RunInit creates the dataset directory structure (commits, stage, refs)
+// under data/datasets/. It is idempotent — re-running after initialisation
+// prints a "Reinitialized" message.
 func RunInit() error {
 	commitsDir := filepath.Join(DatasetRoot, "commits")
 	stageDir := filepath.Join(DatasetRoot, "stage")

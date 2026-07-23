@@ -7,6 +7,8 @@ package retry
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"math/rand"
 	"time"
 )
@@ -56,6 +58,15 @@ func Do(ctx context.Context, cfg Config, fn func(ctx context.Context, attempt in
 	if cfg.MaxAttempts < 1 {
 		cfg.MaxAttempts = 1
 	}
+	if cfg.MaxAttempts > 100 {
+		return fmt.Errorf("retry: MaxAttempts %d exceeds maximum 100", cfg.MaxAttempts)
+	}
+	if cfg.BaseDelay <= 0 {
+		cfg.BaseDelay = DefaultConfig.BaseDelay
+	}
+	if cfg.MaxDelay <= 0 {
+		cfg.MaxDelay = DefaultConfig.MaxDelay
+	}
 
 	var lastErr error
 	delay := cfg.BaseDelay
@@ -79,9 +90,13 @@ func Do(ctx context.Context, cfg Config, fn func(ctx context.Context, attempt in
 		}
 
 		// Exponential backoff with +/-20% jitter, capped at MaxDelay.
-		jitter := time.Duration(float64(delay) * (0.8 + 0.4*rand.Float64()))
+		raw := float64(delay) * (0.8 + 0.4*rand.Float64())
+		if raw > float64(math.MaxInt64) {
+			raw = float64(math.MaxInt64)
+		}
+		jitter := time.Duration(raw)
 		wait := jitter
-		if wait > cfg.MaxDelay {
+		if wait > cfg.MaxDelay || wait < 0 {
 			wait = cfg.MaxDelay
 		}
 

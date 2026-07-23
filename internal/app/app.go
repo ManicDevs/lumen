@@ -1,3 +1,8 @@
+// Package app wires together all of Lumen's subsystems — config loading,
+// engine initialisation, session management, harvest, agent, dataset, and
+// audit logging — and exposes a single Run() entrypoint that dispatches to
+// interactive, autonomous, training, or dataset-initialisation modes based on
+// the parsed command-line flags.
 package app
 
 import (
@@ -7,8 +12,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"gitlab.torproject.org/cerberus-droid/lumen/internal/agent"
@@ -23,7 +30,14 @@ import (
 
 const progName = "lumen"
 
+// Run is Lumen's top-level entrypoint. It parses flags, loads configuration,
+// initialises the engine and audit log, then dispatches to the appropriate
+// mode: code-review session, interactive chat, autonomous agent, training,
+// or dataset initialisation. Returns an exit code (0 on success).
 func Run(args []string) int {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	flags := ParseFlags(args)
 
 	cfg, err := config.Load(nil)
@@ -78,7 +92,7 @@ func Run(args []string) int {
 
 	// --- Auto Mode.
 	if flags.AutoMode {
-		return runAuto(flags, eng, sendMessage, logger)
+		return runAuto(ctx, flags, eng, sendMessage, logger)
 	}
 
 	// --- Seed session with harvested code or chat context.
@@ -142,7 +156,7 @@ func Run(args []string) int {
 			notifyFunc := func(line string) {
 				fmt.Println(line)
 			}
-			if err := agent.Run(context.Background(), opts, hist, sendFunc, notifyFunc); err != nil {
+			if err := agent.Run(ctx, opts, hist, sendFunc, notifyFunc); err != nil {
 				fmt.Printf("auto agent error: %v\n", err)
 			}
 			continue
@@ -164,6 +178,9 @@ func Run(args []string) int {
 	return 0
 }
 
+// makeExchange returns a closure that sends the current conversation history
+// to the LLM, streams the response tokens to stdout, and records the
+// exchange in the history and audit log.
 func makeExchange(hist *session.History, sendMessage func(context.Context, []llm.ChatMessage, llm.StreamFunc) (string, string, error), auditLog *session.AuditLog, logger *slog.Logger) func() {
 	return func() {
 		start := time.Now()
@@ -206,8 +223,11 @@ func makeExchange(hist *session.History, sendMessage func(context.Context, []llm
 	}
 }
 
-// --- Mode runners ---
+// ---------------------------------------------------------------------------
+// Mode runners
+// ---------------------------------------------------------------------------
 
+// runEasterEgg starts the self-play dataset generation loop (--easter-egg).
 func runEasterEgg(host string, flags Flags) int {
 	if err := dataset.RunGenerate(host, config.DefaultOllamaModel, flags.Continuous, flags.PipeDataset, flags.CustomTopic); err != nil {
 		fmt.Fprintf(os.Stderr, "Easter egg failed: %v\n", err)
@@ -216,6 +236,7 @@ func runEasterEgg(host string, flags Flags) int {
 	return 0
 }
 
+// runTrain creates a customised model from collected dataset commits.
 func runTrain(host, baseModel string, trainAll bool) int {
 	if err := dataset.RunTrain(host, baseModel, trainAll); err != nil {
 		fmt.Fprintf(os.Stderr, "Training failed: %v\n", err)
@@ -224,6 +245,7 @@ func runTrain(host, baseModel string, trainAll bool) int {
 	return 0
 }
 
+// runDatasetInit initialises the dataset directory structure.
 func runDatasetInit() int {
 	if err := dataset.RunInit(); err != nil {
 		fmt.Fprintf(os.Stderr, "Dataset init failed: %v\n", err)
@@ -232,7 +254,8 @@ func runDatasetInit() int {
 	return 0
 }
 
-func runAuto(flags Flags, eng *llm.LocalEngine, sendMessage func(context.Context, []llm.ChatMessage, llm.StreamFunc) (string, string, error), logger *slog.Logger) int {
+// runAuto starts the autonomous agent with the given goal (--auto <goal>).
+func runAuto(ctx context.Context, flags Flags, eng *llm.LocalEngine, sendMessage func(context.Context, []llm.ChatMessage, llm.StreamFunc) (string, string, error), logger *slog.Logger) int {
 	fmt.Printf("%s: autonomous agent starting\n", output.Bold("Lumen Auto Mode"))
 	hist := session.NewHistory("autonomous agent session")
 	opts := agent.Options{
@@ -247,15 +270,20 @@ func runAuto(flags Flags, eng *llm.LocalEngine, sendMessage func(context.Context
 	notifyFunc := func(line string) {
 		fmt.Println(output.Dim(line))
 	}
-	if err := agent.Run(context.Background(), opts, hist, sendFunc, notifyFunc); err != nil {
+	if err := agent.Run(ctx, opts, hist, sendFunc, notifyFunc); err != nil {
 		fmt.Fprintf(os.Stderr, "\n%s auto agent error: %v\n", progName, err)
 		return 1
 	}
 	return 0
 }
 
-// --- Snapshot helpers ---
+// ---------------------------------------------------------------------------
+// Snapshot helpers
+// ---------------------------------------------------------------------------
 
+// createSnapshot copies targetPath (file or directory) into backupDir with
+// a timestamped label ("before" or "after"). Silently returns nil if the
+// path does not exist.
 func createSnapshot(backupDir, targetPath, label string) error {
 	info, err := os.Stat(targetPath)
 	if err != nil {
@@ -272,6 +300,8 @@ func createSnapshot(backupDir, targetPath, label string) error {
 	return copyFile(targetPath, filepath.Join(dest, filepath.Base(targetPath)))
 }
 
+// copyFile copies a single regular file from src to dst, creating parent
+// directories as needed.
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -290,6 +320,7 @@ func copyFile(src, dst string) error {
 	return err
 }
 
+// copyDir recursively copies all files and directories under src into dst.
 func copyDir(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {

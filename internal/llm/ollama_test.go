@@ -71,7 +71,7 @@ func TestSendOllama_NoContentBeforeFailure_ReturnsNoPartial(t *testing.T) {
 	if reply != "" {
 		t.Errorf("expected empty reply when nothing streamed, got %q", reply)
 	}
-	if !strings.Contains(err.Error(), "network error") {
-		t.Errorf("expected a network error message, got: %v", err)
+	if !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("expected a connection refused error, got: %v", err)
 	}
 }

@@ -4,6 +4,8 @@ import "strings"
 
 const placeholder = "[REDACTED]"
 
+// Secrets replaces every occurrence of any secret string in s with
+// [REDACTED]. Empty secrets are silently ignored.
 func Secrets(s string, secrets ...string) string {
 	for _, secret := range secrets {
 		if secret == "" {
@@ -14,6 +16,8 @@ func Secrets(s string, secrets ...string) string {
 	return s
 }
 
+// URLQueryParam redacts the value of a named query parameter in a URL
+// string, replacing it with [REDACTED].
 func URLQueryParam(rawURL, paramName string) string {
 	marker := paramName + "="
 	idx := strings.Index(rawURL, marker)

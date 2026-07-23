@@ -36,6 +36,9 @@ type openAIStreamChunk struct {
 	} `json:"choices"`
 }
 
+// OpenAIEngine is an Engine implementation that talks to any server exposing
+// an OpenAI-compatible /v1/chat/completions endpoint (e.g. LM Studio, LocalAI,
+// a vLLM proxy, or the OpenAI API itself).
 type OpenAIEngine struct {
 	host         string
 	model        string
@@ -46,6 +49,7 @@ type OpenAIEngine struct {
 	retryCfg     retry.Config
 }
 
+// NewOpenAIEngine creates an engine that points at an OpenAI-compatible host.
 func NewOpenAIEngine(host, model, systemPrompt string, idleTimeout time.Duration, retryCfg retry.Config, logger *slog.Logger) *OpenAIEngine {
 	if idleTimeout <= 0 {
 		idleTimeout = 60 * time.Second

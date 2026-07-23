@@ -1,3 +1,8 @@
+// Package agent implements an autonomous coding agent that interprets LLM
+// replies, extracts file-write and shell-command code blocks, executes them
+// against the local filesystem (subject to sandbox rules), and feeds results
+// back into the conversation loop until the model signals AUTO_DONE or the
+// iteration limit is reached.
 package agent
 
 import (
@@ -9,24 +14,37 @@ import (
 	"gitlab.torproject.org/cerberus-droid/lumen/internal/llm"
 )
 
+// MaxIterations is the default maximum number of autonomous loop iterations
+// before the agent returns an error.
 const MaxIterations = 20
 
+// Options control the behaviour of the autonomous agent loop.
 type Options struct {
-	Goal       string
-	Sandbox    bool
-	WorkDir    string
-	LiveOutput bool
+	Goal       string // free-form objective the agent should accomplish
+	Sandbox    bool   // enable sandbox restrictions on shell commands
+	WorkDir    string // working directory for file writes and commands
+	LiveOutput bool   // stream LLM tokens to stdout during iteration
 }
 
+// Session lets the agent append messages and snapshot the conversation
+// history without depending on a concrete session package.
 type Session interface {
 	Append(msg llm.ChatMessage)
 	Snapshot() []llm.ChatMessage
 }
 
+// SendFunc is the signature for the LLM call the agent invokes on each
+// iteration. The first return value is the engine name, the second is the
+// reply text, and the error indicates a non-retryable failure.
 type SendFunc func(ctx context.Context, history []llm.ChatMessage, onToken llm.StreamFunc) (string, string, error)
 
+// Notify is called by the agent to emit progress messages (e.g. "wrote file",
+// "running command") during an iteration.
 type Notify func(line string)
 
+// ParseGoal extracts an optional iteration-count override from the goal text
+// (e.g. "5 iterations fix the bugs" → ("fix the bugs", 5)). When no override
+// is present, the default MaxIterations is returned.
 func ParseGoal(input string) (string, int) {
 	// empty goal means use defaults
 	if input == "" {
@@ -43,7 +61,20 @@ func ParseGoal(input string) (string, int) {
 	return input, MaxIterations
 }
 
+// Run executes the autonomous agent loop. On each iteration it sends the
+// conversation history to the LLM via send, parses the reply for fenced file
+// and run blocks, executes them, appends execution feedback to the history,
+// and loops until the model signals AUTO_DONE or MaxIterations is reached.
 func Run(ctx context.Context, opts Options, hist Session, send SendFunc, notify Notify) error {
+	if hist == nil {
+		return errors.New("agent: history must not be nil")
+	}
+	if send == nil {
+		return errors.New("agent: send function must not be nil")
+	}
+	if notify == nil {
+		return errors.New("agent: notify function must not be nil")
+	}
 	_, totalIterations := ParseGoal(opts.Goal)
 	everActed := false
 	for iteration := 1; iteration <= totalIterations; iteration++ {

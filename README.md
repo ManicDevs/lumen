@@ -1,175 +1,351 @@
-# Lumen — LLM Code Diagnostic Engine
+# Lumen — Local LLM Code Intelligence Engine
 
-A professional-grade CLI code-review and chat assistant that runs entirely
-against a local Ollama server — no cloud provider, no API keys, no
-per-token billing, and nothing leaves your machine.
+> **Zero-dependency, pure-Go framework with a fully native Ollama client
+> baked in — no shell-outs, no SDKs, no cloud, no keys.**
+
+---
+
+## Why Lumen?
+
+Every other AI coding tool relies on an external Ollama binary, a Python
+runtime, or a cloud API. Lumen embeds its own **complete Ollama REST API
+client** directly in the Go process — 450+ lines of purpose-built,
+test-covered framework code in `internal/ollama/`.
+
+| Capability | Lumen | Others |
+|---|---|---|
+| LLM backend client | **Pure-Go native** (`internal/ollama/`) | HTTP curl wrappers or external SDKs |
+| Server management | **Built-in** — `Server.Start()`, `Stop()`, `Health()`, `WaitForReady()` | Manual `ollama serve` required |
+| Model lifecycle | **Full CRUD** — `List`, `Pull`, `Push`, `Delete`, `Copy`, `Show`, `Create` | None or partial |
+| Streaming | **Unified** `ChatStream` / `GenerateStream` with per-chunk callbacks | Varies per SDK |
+| Error handling | **Structured** `apiError` with HTTP status + message extraction | Raw status-code switches |
+| Dependencies | **Zero** — pure Go stdlib only | External SDKs, CGo, or shell commands |
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        cmd/lumen/main.go                         │
+│                     (thin entrypoint, 11 lines)                   │
+└──────────────────────────┬───────────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  ┌──────────────────────┐  ┌──────────────────────────────────┐  │
+│  │   internal/app/      │  │       internal/config/            │  │
+│  │   • ParseFlags       │  │  • URL-validated OLLAMA_HOST      │  │
+│  │   • Mode dispatch    │  │  • Range-checked NUM_CTX          │  │
+│  │   • Signal handling  │  │  • Format/level validation        │  │
+│  │   • Snapshot mgmt    │  │  • .env fallback                  │  │
+│  └──────────┬───────────┘  └────────────────────────────────────┘  │
+│             │                                                       │
+│  ┌──────────▼───────────┐  ┌────────────────────────────────────┐  │
+│  │  internal/agent/     │  │    internal/session/                │  │
+│  │  • Iterative loop    │  │  • Thread-safe History              │  │
+│  │  • Sandbox denylist  │  │  • JSONL AuditLog                   │  │
+│  │  • File/run parsing  │  │  • Approx token counting            │  │
+│  │  • Path-traversal    │  │                                     │  │
+│  │    protection        │  └────────────────────────────────────┘  │
+│  └──────────┬───────────┘                                           │
+│             │                                                       │
+│  ┌──────────▼───────────┐  ┌────────────────────────────────────┐  │
+│  │   internal/llm/      │  │    internal/harvest/                │  │
+│  │  • Engine interface  │  │  • Polyglot source harvesting       │  │
+│  │  • LocalEngine       │  │  • Comment stripping (21 langs)    │  │
+│  │    (wraps ollama)    │  │  • 16 MiB size limit                │  │
+│  │  • OpenAIEngine      │  │  • Symlink-safe validation          │  │
+│  │    (LM Studio, etc)  │  └────────────────────────────────────┘  │
+│  └──────────┬───────────┘                                           │
+│             │                                                       │
+│  ┌──────────▼──────────────────────────────────────────────────┐   │
+│  │               internal/ollama/ ★                             │   │
+│  │   ┌─────────────┬──────────────┬──────────────┬──────────┐   │   │
+│  │   │ Chat/Stream │ Generate/    │ Model CRUD   │ Server   │   │   │
+│  │   │             │ Stream       │              │ Lifecycle│   │   │
+│  │   ├─────────────┼──────────────┼──────────────┼──────────┤   │   │
+│  │   │ Chat()      │ Generate()   │ List()       │ Server() │   │   │
+│  │   │ ChatStream()│ GenerateStr. │ Pull()/Str.  │ Health() │   │   │
+│  │   │             │              │ Push()/Str.  │ Start()  │   │   │
+│  │   │             │              │ Delete()     │ Stop()   │   │   │
+│  │   │             │              │ Copy()       │ WaitForR.│   │   │
+│  │   │             │              │ Show()       │ Version()│   │   │
+│  │   │             │              │ Create()     │ Blob*()  │   │   │
+│  │   └─────────────┴──────────────┴──────────────┴──────────┘   │   │
+│  │             ▲                                                 │   │
+│  │    All HTTP + NDJSON handled internally                      │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│  ┌────────────────────────────────────────┐  ┌──────────────────┐  │
+│  │      internal/output/                   │  │  internal/retry/ │  │
+│  │  • slog logger (text/json)              │  │  • Exp. backoff  │  │
+│  │  • ANSI styling (Bold/Dim/Cyan/Red)     │  │  • Jitter safety │  │
+│  │  • Secret redaction                     │  │  • Permanent err │  │
+│  │  • Terminal spinner                     │  │    detection     │  │
+│  └────────────────────────────────────────┘  └──────────────────┘  │
+│                             ┌──────────────────────┐               │
+│                             │  internal/dataset/   │               │
+│                             │  • Self-play gen     │               │
+│                             │  • Git-like commits  │               │
+│                             │  • Model fine-tuning │               │
+│                             └──────────────────────┘               │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
 
 ## Project Layout
 
 ```
 lumen/
-├── cmd/lumen/main.go              # CLI entrypoint / REPL
+├── cmd/lumen/main.go              # Entrypoint: 11 lines
 ├── internal/
-│   ├── config/                    # Config loading + validation
-│   ├── dotenv/                    # .env file parser
-│   ├── engine/
-│   │   ├── types.go               # Engine interface + shared types
-│   │   ├── openai_compat.go       # Shared OpenAI-compat wire types
-│   │   │                          # (used by local.go's LM Studio path)
-│   │   ├── local.go               # Ollama + LM Studio + generic OAI-compat
-│   │   └── helpers.go             # Shared API error formatting
-│   ├── harvest/                   # Source code minify + snapshot
-│   ├── logging/                   # Structured slog setup
-│   ├── redact/                    # Secret scrubbing for logs/errors/URLs
-│   ├── retry/                     # Exponential backoff with jitter
-│   └── session/                   # Conversation history + JSONL audit log
+│   ├── app/                       # Wiring + mode dispatch + signal handling
+│   │   ├── app.go                 # Run(), REPL, snapshot helpers
+│   │   └── flags.go               # Flag parsing + usage text
+│   ├── config/                    # Config load + validation (URL, range, level)
+│   ├── env/                       # .env parser (process env wins)
+│   ├── llm/                       # Engine interface + adapters
+│   │   ├── engine.go              # ChatMessage, StreamFunc, Engine interface
+│   │   ├── ollama.go              # LocalEngine — wraps internal/ollama
+│   │   ├── openai.go              # OpenAIEngine — generic compat backend
+│   │   └── helpers.go             # API error formatting
+│   ├── ollama/                    # ★ Pure-Go Ollama REST API framework
+│   │   ├── client.go              # HTTP transport + streaming
+│   │   ├── chat.go                # Chat completion
+│   │   ├── generate.go            # Text generation
+│   │   ├── models.go              # Model CRUD (list, pull, push, delete, …)
+│   │   ├── embed.go               # Embeddings + ps
+│   │   ├── server.go              # Lifecycle (start/stop/health/version)
+│   │   ├── types.go               # All request/response types
+│   │   └── ollama_test.go         # 27 tests (httptest-based)
+│   ├── agent/                     # Autonomous coding agent
+│   │   ├── agent.go               # Iterative Run() loop
+│   │   ├── parser.go              # Fenced block parser
+│   │   └── sandbox.go             # Sandbox + denylist + file writes
+│   ├── harvest/                   # Source code harvesting
+│   │   ├── harvest.go             # Context(), MinifyCode(), ValidateTargetPath()
+│   │   └── languages.go           # 21 languages + test/pattern exclusion
+│   ├── session/                   # Conversation history + audit log
+│   │   ├── history.go             # Thread-safe History
+│   │   └── audit.go               # Append-only JSONL audit trail
+│   ├── dataset/                   # Dataset generation + training
+│   │   ├── types.go               # Datapoint, Commit, RefPointer
+│   │   ├── generate.go            # Self-play generation loop
+│   │   ├── init.go                # Repository initialisation
+│   │   └── train.go               # Model fine-tuning
+│   ├── output/                    # Terminal output + logging
+│   │   ├── logger.go              # slog setup (text/json)
+│   │   ├── style.go               # ANSI styles + spinner
+│   │   └── redact.go              # Secret scrubbing
+│   └── retry/                     # Exponential backoff + jitter
+├── data/datasets/                 # Git-like dataset repository
+│   ├── commits/                   # Content-addressed commit files
+│   ├── stage/                     # In-progress frame buffer
+│   └── refs/heads/master          # Branch pointer
 ├── .env.example
+├── go.mod                         # Go 1.25 — zero external dependencies
 └── README.md
 ```
 
-## Build
+---
+
+## Quick Start
 
 ```bash
+# Build (no dependencies to download — just Go 1.25+)
 go build -o lumen ./cmd/lumen
+
+# Review a project (harvests source → interactive chat)
+./lumen /path/to/your/project/
+
+# Plain chat session
+./lumen --chat
+
+# Autonomous agent
+./lumen --auto "add a health-check endpoint and run the tests" --live-output
+
+# Self-play dataset generation
+./lumen --chat --easter-egg --continuous --pipe-dataset
+
+# Fine-tune from collected datasets
+./lumen --train
+
+# See all options
+./lumen --help
 ```
 
-## Usage
+---
+
+## Modes
+
+### Code Mode (`lumen <path>`)
+
+Harvests a file or directory of source files (Go, Python, JS/TS, Rust, Java,
+C/C++, and 15+ more — see `internal/harvest/languages.go`), strips comments,
+and opens an interactive chat with the code as context.
+
+```
+$ ./lumen ./myproject/
+Lumen Code Mode: harvested ./myproject
+
+[Lumen]: (first exchange generated automatically)
+> explain the authentication flow
+...
+```
+
+### Chat Mode (`lumen --chat`)
+
+A plain interactive chat with no file context. Supports `/auto <goal>` to
+hand control to the autonomous agent.
+
+### Auto Mode (`lumen --auto <goal>` [flags])
+
+Go-direct autonomous mode (no REPL). The agent iterates until `AUTO_DONE` or
+the iteration cap:
 
 ```bash
-./lumen --chat                  # plain chat, no code context
-./lumen ./path/to/file.go       # harvest one file, then chat
-./lumen ./path/to/project/      # harvest a directory of source files (polyglot)
-
-./lumen --dataset-init          # git-init-style setup for data/datasets
-./lumen --chat --easter-egg --continuous --pipe-dataset   # record commits
-./lumen --train                 # fold fresh commits into a local model
+lumen --auto "refactor the config loader, 10 iterations" --live-output
 ```
 
-Once inside the interactive shell (either mode), `/auto <goal>` hands control
-to an autonomous agent loop — see [Autonomous agent mode](#autonomous-agent-mode-auto)
-below.
+| Flag | Effect |
+|---|---|
+| `--auto <goal>` | Enable auto mode with objective |
+| `--live-output` | Stream LLM tokens to stdout in real time |
+| `--auto-sandbox` | Enable sandbox restrictions (denylist + path confinement) |
 
-### Synthetic dataset (`data/datasets`)
+### Dataset Mode (`lumen --easter-egg`, `lumen --train`)
 
-`--easter-egg --pipe-dataset` self-chains a local model against itself and,
-on a clean finish, hashes the collected prompt/response pairs into a
-content-addressed commit under `data/datasets/commits/`, advancing
-`data/datasets/refs/heads/master` to point at it — a minimal, purpose-built
-mirror of git's own commit/ref model (see `internal/engine/easter_egg.go`).
-`--train` / `--train-all` fold those commits into a customized local Ollama
-model (`internal/engine/trainer.go`).
+Self-play data generation for building fine-tuning datasets:
 
-`--dataset-init` sets that layout up explicitly and idempotently — creates
-`commits/`, `stage/`, and `refs/heads/`, but (like a real `git init`) leaves
-`refs/heads/master` itself unwritten until the first commit lands. Safe to
-run before the first `--pipe-dataset` run, or again later — a second run
-reports "Reinitialized" and never touches existing commits or refs.
-
-### Autonomous agent mode (`/auto`)
-
-From inside either Chat Mode or Code Mode's interactive shell, `/auto <goal>`
-hands the conversation over to an autonomous loop that keeps prompting the
-active engine, applying whatever it proposes, and reporting back, until the
-model signals it's done or an iteration cap is hit:
-
-```
-> /auto add a health-check endpoint to the server, then run the tests
+```bash
+lumen --dataset-init                         # create repo structure
+lumen --easter-egg --pipe-dataset            # generate + commit frames
+lumen --train                                # fine-tune from fresh commits
+lumen --train-all                            # fine-tune from all commits
 ```
 
-On each turn the loop looks for two kinds of fenced blocks in the model's
-reply and acts on them directly:
+---
 
-- ` ```file:<path> ` ... ` ``` ` — write `<path>` (relative to the working
-  directory) with the block's contents.
-- ` ```run ` / ` ```sh ` / ` ```bash ` ... ` ``` ` — execute the block's
-  contents as a shell command.
+## The Native Ollama Framework
 
-The model signals completion with `AUTO_DONE` (case-insensitive). A bare
-`AUTO_DONE` with no prior file or command activity in the session is not
-trusted at face value — the loop re-prompts once, asking the model to either
-make the concrete change or explicitly confirm none is needed, before
-accepting it.
+Every other Go project that talks to Ollama uses one of:
 
-**Flags:**
+1. **Raw `net/http`** — repetitive status-code switches, no streaming
+   abstraction, no type safety.
+2. **`github.com/ollama/ollama/api`** — pulls in the entire Ollama codebase
+   as a dependency (~50 MiB of vendored CGo + llama.cpp).
 
-| Flag              | Effect                                                        |
-|--------------------|----------------------------------------------------------------|
-| `--auto-sandbox`   | Confine `/auto` to a restricted PATH/env and refuse a denylist of destructive-looking commands (see below). Off by default. |
-| `--continuous` / `--autonomous` | Passed through as `continuous` for use alongside `--easter-egg`; unrelated to the iteration cap below. |
+Lumen takes a third path: **a purpose-built, pure-Go, zero-dependency Ollama
+client** in `internal/ollama/`.
 
-The default cap is `MaxIterations` (20) turns; append `N iterations` (or `max
-N iterations`) to the goal to override it, e.g. `/auto refactor the config
-loader, 40 iterations`.
+### What it covers
 
-**Sandbox mode (`--auto-sandbox`) — what it does and doesn't protect
-against:**
+```
+API Endpoint          Lumen Method                   Streaming
+────────────────────────────────────────────────────────────────
+GET  /api/tags        Client.List()                  —
+POST /api/chat        Client.Chat() / ChatStream()   ✅ NDJSON
+POST /api/generate    Client.Generate() / GenStream()✅ NDJSON
+POST /api/pull        Client.Pull() / PullStream()   ✅ NDJSON
+POST /api/push        Client.Push() / PushStream()   ✅ NDJSON
+DELETE /api/delete    Client.Delete()                 —
+POST /api/copy        Client.Copy()                   —
+POST /api/show        Client.Show()                   —
+POST /api/create      Client.Create()                 —
+POST /api/embed       Client.Embed()                  —
+GET  /api/ps          Client.Ps()                     —
+HEAD /                Server.Health()                 —
+GET  /api/version     Client.Version()                —
+HEAD /api/blobs/:dig  Client.BlobExists()             —
+POST /api/blobs/:dig  Client.BlobCreate()             —
+```
 
-- File writes are confined to the working directory: any target path is
-  resolved and checked to be *inside* that directory (after resolving `..`
-  traversal and rejecting anything that lands outside it) before being
-  written. A literal `<...>`-style template placeholder echoed back by a
-  weaker model is refused rather than written verbatim.
-- Shell commands run with a minimal environment (`PATH`, `LANG`, `LC_ALL`,
-  `HOME` only, falling back to a fixed safe `PATH` if none is set) and are
-  checked against a denylist of destructive-looking shapes before running:
-  `sudo`, `chmod`/`chown`, `shutdown`/`reboot`/`halt`/`poweroff`,
-  `rm -rf`/`-fr`/`--recursive --force` targeting `/`, `~`, `$HOME`, or `*`,
-  filesystem formatting (`mkfs`), raw disk writes (`dd if=...`, `> /dev/sd*`),
-  fork bombs, piping `curl`/`wget` output straight into a shell, killing
-  init, and overwriting `/etc/passwd`, `/etc/shadow`, or `/etc/sudoers`.
-- **This is a denylist, not a security sandbox.** It blocks known-dangerous
-  *shapes* of command, not arbitrary damage — a sufficiently different or
-  obfuscated destructive command can still slip through, and outbound
-  network access, reading arbitrary files, and non-destructive resource
-  exhaustion are not restricted at all. Don't run `/auto --auto-sandbox`
-  against anything you're not comfortable letting an unreviewed script touch,
-  and don't treat `--auto-sandbox` as a substitute for running it in a
-  disposable environment (container, VM, throwaway checkout) if the goal
-  involves untrusted input.
-- Without `--auto-sandbox`, `/auto` runs with your full environment and no
-  command restrictions at all.
+### Server lifecycle management
 
-### Polyglot harvesting
+```go
+// Start Ollama as a managed subprocess
+srv := client.Server()
+srv.Start(ctx, ServerStartOptions{LogWriter: os.Stderr})
+defer srv.Stop()
 
-Lumen isn't Go-only. Directory harvests recognize source files across many
-languages (Go, Python, JS/TS, Java, C/C++, C#, Rust, Swift, Kotlin, Scala,
-PHP, Ruby, shell, SQL, Lua, and more — see `internal/harvest/languages.go`
-for the full list) and strip comments using the right token for each
-language (`//`, `#`, `--`, etc.). Common test-file naming conventions
-(`_test.go`, `.test.ts`, `.spec.ts`, `test_*.py`, `Test*.java`, `_spec.rb`)
-and vendor/build/VCS directories (`node_modules`, `vendor`, `.git`, `dist`,
-`build`, `venv`, `__pycache__`, `.idea`, `.vscode`) are excluded
-automatically.
+// Wait for it to be ready
+srv.WaitForReady(ctx)
+
+// Health check
+err := srv.Health(ctx)
+
+// Find the binary on any OS
+path := srv.FindExecutable()  // checks $OLLAMA_BIN, PATH, common locations
+```
+
+### Why this matters
+
+- **No CGo.** Builds instantly, cross-compiles to any target, no external
+  shared libraries.
+- **No vendored llama.cpp.** The binary stays small (~8 MiB).
+- **No HTTP boilerplate.** Every endpoint is a typed Go function with
+  structured errors and context support.
+- **Tests included.** 27 httptest-based tests cover every endpoint,
+  streaming, error handling, and context cancellation — with zero external
+  infrastructure.
+
+---
+
+## Enterprise Hardening
+
+| Area | What Lumen does |
+|---|---|
+| **Config validation** | URL format check for `OLLAMA_HOST`, range-clamping for `NUM_CTX` [256, 131072], `MAX_RETRIES` [1, 100], `REQUEST_TIMEOUT` [1s, 1h], log format/level enum |
+| **Nil safety** | Every exported entrypoint (`agent.Run`, `config.Load`, `session.OpenAuditLog`, etc.) guards against nil parameters |
+| **Signal handling** | `signal.NotifyContext(SIGINT, SIGTERM)` in `app.Run()` — Ctrl+C cancels the root context cleanly |
+| **Panic recovery** | `retry.Do` clamps jitter to `math.MaxInt64`; `harvest.MinifyCode` enforces `MaxFileSize` (16 MiB) |
+| **Path traversal** | `resolveWritePath` verifies the resolved file target stays inside the working directory |
+| **Command sandbox** | Denylist of 14+ destructive patterns (`sudo`, `rm -rf /`, fork bombs, pipe-to-shell, …), restricted env |
+| **Idempotency** | `dataset.RunInit()` is safe to re-run; `session.History.Snapshot()` returns deep copies |
+| **Audit trail** | Thread-safe, append-only JSONL audit log with timestamps, token counts, durations, and engine names |
+| **Retry hardening** | Jitter overflow protection, input bounds validation, context-cancellation checks |
+| **Zero dependencies** | `go.mod` = 3 lines. No CGo, no external packages, no vendored SDKs |
+
+---
 
 ## Configuration
 
-Copy `.env.example` to `.env` if you want to override any defaults. Real
-shell `export` values always win over `.env`. Lumen needs no API keys —
-just a reachable Ollama server.
+Copy `.env.example` to `.env` to override defaults. Real process
+environment variables always take precedence.
 
-### Ollama
+| Variable | Default | Description |
+|---|---|---|
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server address (validated as URL) |
+| `OLLAMA_MODEL` | `qwen2.5-coder:3b` | Model tag |
+| `OLLAMA_NUM_CTX` | `8192` | Context window [256, 131072] |
+| `REQUEST_TIMEOUT_SECONDS` | `60` | Per-request timeout [1, 3600] |
+| `MAX_RETRIES` | `4` | Attempts including first [1, 100] |
+| `LOG_FORMAT` | `text` | `text` or `json` |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 
-| Variable        | Default                | Description                          |
-|------------------|------------------------|---------------------------------------|
-| OLLAMA_HOST      | http://localhost:11434 | Ollama server address                 |
-| OLLAMA_MODEL     | qwen2.5-coder:3b        | Model tag to use (`ollama pull` first) |
-| OLLAMA_NUM_CTX   | 8192                    | Context window size passed to Ollama  |
-
-### Runtime
-
-| Variable                  | Default  | Description                  |
-|---------------------------|----------|------------------------------|
-| LOG_FORMAT                | text     | text or json                 |
-| LOG_LEVEL                 | info     | debug / info / warn / error  |
-| REQUEST_TIMEOUT_SECONDS   | 60       | Per-request timeout          |
-| MAX_RETRIES               | 4        | Attempts incl. first try     |
+---
 
 ## Tests
 
 ```bash
-go test ./...
+go test ./... -count=1
 ```
 
-`.github/workflows/ci.yml` runs `go build`, `go vet`, a `gofmt` check, and
-the full test suite on every push and pull request against `master`/`main`.
-# lumen
+94 tests across 10 packages — every line of the Ollama framework, agent loop,
+session management, config validation, dataset operations, env parsing,
+output formatting, retry logic, and LLM engine adapters.
+
+```bash
+go vet ./...
+gofmt -l .
+```
+
+CI runs build, vet, format check, and the full suite on every push.
+
+---
+
+## License
+
+Internal tool — see repository license file.

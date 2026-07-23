@@ -13,6 +13,8 @@ func TestValidate_AcceptsGoodConfig(t *testing.T) {
 		OllamaNumCtx:   DefaultOllamaNumCtx,
 		MaxRetries:     DefaultMaxRetries,
 		RequestTimeout: DefaultRequestTimeout,
+		LogFormat:      DefaultLogFormat,
+		LogLevel:       DefaultLogLevel,
 	}
 	if err := c.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)

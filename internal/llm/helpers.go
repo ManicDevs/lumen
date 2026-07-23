@@ -8,6 +8,7 @@ import (
 
 const maxAPIErrorMsgLen = 200
 
+// apiErrorMessage formats a human-readable error from an HTTP response.
 func apiErrorMessage(backend string, statusCode int, body []byte) string {
 	reason := extractErrorReason(body)
 	if reason == "" {
@@ -16,6 +17,7 @@ func apiErrorMessage(backend string, statusCode int, body []byte) string {
 	return fmt.Sprintf("%s: %s (HTTP %d)", backend, reason, statusCode)
 }
 
+// extractErrorReason tries to parse a JSON error body into a short reason.
 func extractErrorReason(body []byte) string {
 	var parsed struct {
 		Error struct {
