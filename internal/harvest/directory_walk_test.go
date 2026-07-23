@@ -1,4 +1,4 @@
-package config
+package harvest
 
 import (
 	"io/fs"

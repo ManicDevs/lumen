@@ -1,74 +1,120 @@
-package harvest
+package audit
 
-// Fixed: error swallowing during audit logging (C3)
-// Enhanced: add structured error tracking with full context
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 )
 
-// Add to AuditEntry struct to capture full context
+type AuditLog struct {
+	entries   []AuditEntry
+	mu        sync.RWMutex
+	logWriter *os.File
+	filePath  string
+}
+
 type AuditEntry struct {
-	Timestamp time.Time `json:"timestamp"`
-	EventType string    `json:"event_type"`
-	Role      string    `json:"role"`
-	TokenCount int     `json:"token_count"`
-	Details   string    `json:"details,omitempty"`
-	Error     string    `json:"error,omitempty"`
-	// New fields for enhanced diagnostics
-	Context map[string]interface{} `json:"context,omitempty"`
+	Timestamp  time.Time              `json:"timestamp"`
+	EventType  string                 `json:"event_type"`
+	Role       string                 `json:"role"`
+	TokenCount int                    `json:"token_count"`
+	Details    string                 `json:"details,omitempty"`
+	Error      string                 `json:"error,omitempty"`
+	Context    map[string]interface{} `json:"context,omitempty"`
 }
 
-// Improved error handling with rich context
-func (ae *AuditEntry) String() string {
-	if ae.Error != "" {
-		return ae.Error
-	}
-	return fmt.Sprintf("%s %s=%d %s", ae.EventType, ae.Role, ae.TokenCount, ae.Context)
+type AuditLogConfig struct {
+	SyncOnWrite        bool `json:"sync_on_write"`
+	MaxFileSize        int64 `json:"max_file_size"`
+	CompressionLevel   int   `json:"compression_level"`
 }
 
-// Enhanced audit logging that preserves error context
-func logAuditEntry(al *AuditLog, entry AuditEntry) {
-	al.Lock()
-	defer al.Unlock()
-	entries := append(al.entries, entry)
-	al.entries = entries
-	
-	// If this is an error with context, include stack trace info
-	if entry.Error != "" && len(entry.Context) > 0 {
-		// Add execution context details
-		entry.Context["stack"] = getCallStack()
+func NewAuditLog(configPath string) (*AuditLog, error) {
+	if configPath == "" {
+		configPath = "/var/log/lumen/audit.jsonl"
 	}
 	
-	// Write immediately to ensure durability
-	if err := al.logWriter.Write([]byte(entry.String() + "\n")); err != nil {
-		// Critical failure to log - but don't crash the system
-		// This is a last-resort error handling scenario
-	}
-}
-
-// Enhanced error handling for request processing with full context capture
-func ProcessRequest(ctx context.Context, requestType string, args ...interface{}) {
-	// Enhanced error handling with telemetry
-	endTime := time.Now()
-	
-	// Add request metadata
-	requestCtx := map[string]interface{}{
-		"args":    args,
-		"request_id": generateRequestID(),
-		"timestamp": endTime,
-	}
-	
-	// Special handling for known error-prone operations
-	switch requestType {
-	case "train", "process", "store":
-		// Add request-specific validation
-		if err := validateRequest(requestType, args); err != nil {
-			logAuditEntryWithContext(ctx, "error", requestType, fmt.Sprintf("validation_failed: %v", err), requestCtx)
-			return
+	if _, err := os.Stat(filepath.Dir(configPath)); err != nil {
+		if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+			return nil, fmt.Errorf("failed to create log directory: %w", err)
 		}
 	}
 	
-	// Continue with normal processing
-	// ... existing processing code ...
+	log, err := os.OpenFile(configPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open audit log: %w", err)
+	}
+	
+	return &AuditLog{
+		logWriter: log,
+		filePath:  configPath,
+	}, nil
+}
+
+func (al *AuditLog) Add(entry AuditEntry) error {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	
+	al.entries = append(al.entries, entry)
+	
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
+	
+	if al.logWriter != nil {
+		data, err := json.Marshal(entry)
+		if err != nil {
+			return fmt.Errorf("failed to marshal audit entry: %w", err)
+		}
+		if _, err := al.logWriter.Write(append(data, '\n')); err != nil {
+			return fmt.Errorf("failed to write to audit log: %w", err)
+		}
+		al.logWriter.Sync()
+	}
+	
+	return nil
+}
+
+func (al *AuditLog) Close() error {
+	if al.logWriter != nil {
+		if err := al.logWriter.Close(); err != nil {
+			return fmt.Errorf("failed to close audit log: %w", err)
+		}
+	}
+	return nil
+}
+
+func (al *AuditLog) GetEntries() []AuditEntry {
+	al.mu.RLock()
+	defer al.mu.RUnlock()
+	return append([]AuditEntry{}, al.entries...)
+}
+
+func (al *AuditLog) Clear() {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+	al.entries = []AuditEntry{}
+}
+
+func (al *AuditLog) Count() int {
+	al.mu.RLock()
+	defer al.mu.RUnlock()
+	return len(al.entries)
+}
+
+func FormatAuditEntry(ctx context.Context, eventType, role string, tokenCount int, details string, err error, extra map[string]interface{}) AuditEntry {
+	entry := AuditEntry{
+		Timestamp:  time.Now(),
+		EventType:  eventType,
+		Role:       role,
+		TokenCount: tokenCount,
+		Details:    details,
+		Error:      err.Error(),
+		Context:    extra,
+	}
+	return entry
 }

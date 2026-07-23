@@ -1,10 +1,6 @@
 package output
 
-import (
-	"sync"
-	"testing"
-	"time"
-)
+import "os"
 
 func TestSpinner_NonTTYNoops(t *testing.T) {
 	TTY = false
