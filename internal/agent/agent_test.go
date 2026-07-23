@@ -31,6 +31,7 @@ func collectNotify() (Notify, *[]string) {
 }
 
 func TestRunAutoDoneCaseInsensitive(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	hist := session.NewHistory("indexed context")
 	send := scriptedSend(t, []string{
@@ -61,6 +62,7 @@ func TestRunAutoDoneCaseInsensitive(t *testing.T) {
 }
 
 func TestRunImmediateAutoDone(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	hist := session.NewHistory("indexed context")
 	send := scriptedSend(t, []string{
@@ -93,6 +95,7 @@ func TestRunImmediateAutoDone(t *testing.T) {
 }
 
 func TestRunWriteThenRunThenDone(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	hist := session.NewHistory("indexed context")
 	send := scriptedSend(t, []string{
@@ -129,6 +132,7 @@ func TestRunWriteThenRunThenDone(t *testing.T) {
 }
 
 func TestRunDenylistedCommandRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	hist := session.NewHistory("indexed context")
 	send := scriptedSend(t, []string{
@@ -164,6 +168,7 @@ func TestRunDenylistedCommandRefused(t *testing.T) {
 }
 
 func TestRunTokenCallbackForwarding(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	hist := session.NewHistory("indexed context")
 
@@ -200,6 +205,7 @@ func TestRunTokenCallbackForwarding(t *testing.T) {
 }
 
 func TestRunNonStreamingCompatibility(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	hist := session.NewHistory("indexed context")
 
@@ -227,6 +233,7 @@ func TestRunNonStreamingCompatibility(t *testing.T) {
 }
 
 func TestRunHitsMaxIterations(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	hist := session.NewHistory("indexed context")
 	var replies []string
@@ -250,6 +257,7 @@ func TestRunHitsMaxIterations(t *testing.T) {
 }
 
 func TestMatchDenylistCatchesDangerousShapes(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"sudo rm -rf /",
 		"SUDO apt-get remove --purge foo",
@@ -276,6 +284,7 @@ func TestMatchDenylistCatchesDangerousShapes(t *testing.T) {
 }
 
 func TestMatchDenylistAllowsBenignLookalikes(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"./recreate_chmod_docs.sh",
 		"echo sudoku_solver.go",
@@ -293,6 +302,7 @@ func TestMatchDenylistAllowsBenignLookalikes(t *testing.T) {
 }
 
 func TestResolveWritePathRejectsTraversal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	_, err := resolveWritePath(dir, "../../etc/passwd")
 	if err == nil {
@@ -304,6 +314,7 @@ func TestResolveWritePathRejectsTraversal(t *testing.T) {
 }
 
 func TestDetectMalformedAttempts(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name      string
 		reply     string

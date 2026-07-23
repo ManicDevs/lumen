@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewHistory_SeededWithInitialContext(t *testing.T) {
+	t.Parallel()
 	h := NewHistory("test context")
 	snap := h.Snapshot()
 	if len(snap) != 2 {
@@ -25,6 +26,7 @@ func TestNewHistory_SeededWithInitialContext(t *testing.T) {
 }
 
 func TestHistory_Append(t *testing.T) {
+	t.Parallel()
 	h := NewHistory("ctx")
 	h.Append(llm.ChatMessage{Role: "user", Content: "hello"})
 	h.Append(llm.ChatMessage{Role: "assistant", Content: "world"})
@@ -38,6 +40,7 @@ func TestHistory_Append(t *testing.T) {
 }
 
 func TestHistory_SnapshotIsCopy(t *testing.T) {
+	t.Parallel()
 	h := NewHistory("ctx")
 	snap := h.Snapshot()
 	snap[0].Content = "mutated"
@@ -48,6 +51,7 @@ func TestHistory_SnapshotIsCopy(t *testing.T) {
 }
 
 func TestHistory_ConcurrentSafe(t *testing.T) {
+	t.Parallel()
 	h := NewHistory("ctx")
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
@@ -66,6 +70,7 @@ func TestHistory_ConcurrentSafe(t *testing.T) {
 }
 
 func TestHistory_Render(t *testing.T) {
+	t.Parallel()
 	h := NewHistory("initial context")
 	h.Append(llm.ChatMessage{Role: "user", Content: "hello"})
 	h.Append(llm.ChatMessage{Role: "assistant", Content: "world"})
@@ -85,6 +90,7 @@ func TestHistory_Render(t *testing.T) {
 }
 
 func TestApproxTokens(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		input string
 		want  int
@@ -103,6 +109,7 @@ func TestApproxTokens(t *testing.T) {
 }
 
 func TestOpenAuditLog_CreatesFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "audit.jsonl")
 	al, err := OpenAuditLog(path, nil)
@@ -117,6 +124,7 @@ func TestOpenAuditLog_CreatesFile(t *testing.T) {
 }
 
 func TestOpenAuditLog_AppendsEntries(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "audit.jsonl")
 	al, err := OpenAuditLog(path, nil)
@@ -145,6 +153,7 @@ func TestOpenAuditLog_AppendsEntries(t *testing.T) {
 }
 
 func TestAuditLog_WritesTimestamp(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "audit.jsonl")
 	al, err := OpenAuditLog(path, nil)

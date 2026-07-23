@@ -6,6 +6,7 @@ import (
 )
 
 func TestParseDotenv(t *testing.T) {
+	t.Parallel()
 	input := `
 # a comment
 CLOUD_API_KEY=abc123
@@ -39,6 +40,7 @@ EMPTY_VAL=
 }
 
 func TestApplyEnv_RealValueWins(t *testing.T) {
+	t.Parallel()
 	existing := map[string]string{"CLOUD_API_KEY": "from_shell"}
 	parsed := map[string]string{"CLOUD_API_KEY": "from_dotenv"}
 	merged := ApplyEnv(existing, parsed)
@@ -48,6 +50,7 @@ func TestApplyEnv_RealValueWins(t *testing.T) {
 }
 
 func TestApplyEnv_EmptyExportedVarFallsThrough(t *testing.T) {
+	t.Parallel()
 	existing := map[string]string{"CLOUD_API_KEY": ""}
 	parsed := map[string]string{"CLOUD_API_KEY": "from_dotenv"}
 	merged := ApplyEnv(existing, parsed)
@@ -57,6 +60,7 @@ func TestApplyEnv_EmptyExportedVarFallsThrough(t *testing.T) {
 }
 
 func TestApplyEnv_TrulyUnsetFallsThrough(t *testing.T) {
+	t.Parallel()
 	existing := map[string]string{}
 	parsed := map[string]string{"CLOUD_API_KEY": "from_dotenv"}
 	merged := ApplyEnv(existing, parsed)
@@ -66,6 +70,7 @@ func TestApplyEnv_TrulyUnsetFallsThrough(t *testing.T) {
 }
 
 func TestLoadDotenv_MissingFileIsNotError(t *testing.T) {
+	t.Parallel()
 	got, err := LoadDotenv("/nonexistent/path/.env")
 	if err != nil {
 		t.Fatalf("missing .env should not error, got: %v", err)

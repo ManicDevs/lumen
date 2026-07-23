@@ -7,6 +7,7 @@ import (
 )
 
 func TestValidate_AcceptsGoodConfig(t *testing.T) {
+	t.Parallel()
 	c := Config{
 		OllamaHost:     DefaultOllamaHost,
 		OllamaModel:    DefaultOllamaModel,
@@ -22,6 +23,7 @@ func TestValidate_AcceptsGoodConfig(t *testing.T) {
 }
 
 func TestValidate_RejectsEmptyOllamaModel(t *testing.T) {
+	t.Parallel()
 	c := Config{
 		OllamaHost:     DefaultOllamaHost,
 		OllamaModel:    "",
@@ -34,6 +36,7 @@ func TestValidate_RejectsEmptyOllamaModel(t *testing.T) {
 }
 
 func TestValidate_RejectsZeroMaxRetries(t *testing.T) {
+	t.Parallel()
 	c := Config{
 		OllamaModel:    DefaultOllamaModel,
 		MaxRetries:     0,
@@ -45,6 +48,7 @@ func TestValidate_RejectsZeroMaxRetries(t *testing.T) {
 }
 
 func TestValidate_RejectsZeroOllamaNumCtx(t *testing.T) {
+	t.Parallel()
 	c := Config{
 		OllamaModel:    DefaultOllamaModel,
 		OllamaNumCtx:   0,
@@ -57,6 +61,7 @@ func TestValidate_RejectsZeroOllamaNumCtx(t *testing.T) {
 }
 
 func TestLoad_OllamaNumCtxDefaultAndOverride(t *testing.T) {
+	t.Parallel()
 	os.Unsetenv("OLLAMA_NUM_CTX")
 	cfg, err := Load(nil)
 	if err != nil {
@@ -78,10 +83,12 @@ func TestLoad_OllamaNumCtxDefaultAndOverride(t *testing.T) {
 }
 
 func TestWarnOnLooseDotEnvPerms_NoPanicOnMissingFile(t *testing.T) {
+	t.Parallel()
 	warnOnLooseDotEnvPerms(filepath.Join(t.TempDir(), "nonexistent.env"), nil)
 }
 
 func TestWarnOnLooseDotEnvPerms_TightPermsNoWarning(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".env")
 	if err := os.WriteFile(path, []byte("X=1"), 0o600); err != nil {

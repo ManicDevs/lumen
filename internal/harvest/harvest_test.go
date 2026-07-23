@@ -20,6 +20,7 @@ func writeFile(t *testing.T, dir, name, content string) string {
 }
 
 func TestMinifyCode_StripsCommentsAndBlankLines(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := "package foo\n\n// full line comment\nfunc bar() { // trailing\n\treturn // also trailing\n}\n\n\n"
 	path := writeFile(t, dir, "foo.go", src)
@@ -40,6 +41,7 @@ func TestMinifyCode_StripsCommentsAndBlankLines(t *testing.T) {
 }
 
 func TestContext_SingleFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := writeFile(t, dir, "main.go", "package main\nfunc main() {}\n")
 
@@ -56,6 +58,7 @@ func TestContext_SingleFile(t *testing.T) {
 }
 
 func TestContext_DirectoryExcludesTestAndBinFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeFile(t, dir, "a.go", "package a\n")
 	writeFile(t, dir, "a_test.go", "package a\n// should be excluded\n")
@@ -81,6 +84,7 @@ func TestContext_DirectoryExcludesTestAndBinFiles(t *testing.T) {
 }
 
 func TestContext_NonexistentPathErrors(t *testing.T) {
+	t.Parallel()
 	_, err := Context("/nonexistent/path/should/not/exist")
 	if err == nil {
 		t.Error("expected error for nonexistent path")
@@ -88,12 +92,14 @@ func TestContext_NonexistentPathErrors(t *testing.T) {
 }
 
 func TestValidateTargetPath_RejectsMissing(t *testing.T) {
+	t.Parallel()
 	if err := ValidateTargetPath("/nonexistent/path"); err == nil {
 		t.Error("expected error for missing path")
 	}
 }
 
 func TestValidateTargetPath_AcceptsRealFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := writeFile(t, dir, "ok.go", "package ok\n")
 	if err := ValidateTargetPath(path); err != nil {
@@ -102,6 +108,7 @@ func TestValidateTargetPath_AcceptsRealFile(t *testing.T) {
 }
 
 func TestMinifyCode_PythonHashComments(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := "def foo():\n    # full line comment\n    return 1  # trailing\n\n\n"
 	path := writeFile(t, dir, "foo.py", src)
@@ -122,6 +129,7 @@ func TestMinifyCode_PythonHashComments(t *testing.T) {
 }
 
 func TestMinifyCode_SQLDashDashComments(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := "SELECT 1;\n-- a comment\nSELECT 2; -- trailing\n"
 	path := writeFile(t, dir, "query.sql", src)
@@ -139,6 +147,7 @@ func TestMinifyCode_SQLDashDashComments(t *testing.T) {
 }
 
 func TestContext_DirectoryIncludesMultipleLanguages(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeFile(t, dir, "main.go", "package main\n")
 	writeFile(t, dir, "app.py", "def main():\n    pass\n")

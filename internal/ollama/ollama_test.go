@@ -34,6 +34,7 @@ func writeNDJSON(w http.ResponseWriter, chunks []string) {
 // --- Chat (non-streaming) ---
 
 func TestChat_NonStreaming(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
@@ -66,6 +67,7 @@ func TestChat_NonStreaming(t *testing.T) {
 // --- Chat (streaming) ---
 
 func TestChat_Streaming(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -107,6 +109,7 @@ func TestChat_Streaming(t *testing.T) {
 // --- Chat stream callback stops early ---
 
 func TestChat_StreamCallbackErrorStops(t *testing.T) {
+	t.Parallel()
 	callCount := 0
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeNDJSON(w, []string{
@@ -136,6 +139,7 @@ func TestChat_StreamCallbackErrorStops(t *testing.T) {
 // --- Generate (non-streaming) ---
 
 func TestGenerate_NonStreaming(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, GenerateResponse{
 			Response: "Generated text",
@@ -159,6 +163,7 @@ func TestGenerate_NonStreaming(t *testing.T) {
 // --- Generate (streaming) ---
 
 func TestGenerate_Streaming(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeNDJSON(w, []string{
 			`{"response":"Hello","done":false}`,
@@ -190,6 +195,7 @@ func TestGenerate_Streaming(t *testing.T) {
 // --- List models ---
 
 func TestList(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Errorf("expected GET, got %s", r.Method)
@@ -218,6 +224,7 @@ func TestList(t *testing.T) {
 // --- Pull streaming ---
 
 func TestPullStream(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeNDJSON(w, []string{
 			`{"status":"pulling manifest"}`,
@@ -242,6 +249,7 @@ func TestPullStream(t *testing.T) {
 // --- Delete ---
 
 func TestDelete(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			t.Errorf("expected DELETE, got %s", r.Method)
@@ -258,6 +266,7 @@ func TestDelete(t *testing.T) {
 // --- Copy ---
 
 func TestCopy(t *testing.T) {
+	t.Parallel()
 	copied := false
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req CopyRequest
@@ -283,6 +292,7 @@ func TestCopy(t *testing.T) {
 // --- Show ---
 
 func TestShow(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, ShowResponse{
 			Modelfile:  "FROM llama3.2",
@@ -304,6 +314,7 @@ func TestShow(t *testing.T) {
 // --- Create ---
 
 func TestCreate(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -317,6 +328,7 @@ func TestCreate(t *testing.T) {
 // --- Embed ---
 
 func TestEmbed(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, EmbedResponse{
 			Model:      "test-model",
@@ -340,6 +352,7 @@ func TestEmbed(t *testing.T) {
 // --- Ps ---
 
 func TestPs(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, PsResponse{
 			Models: []LoadedModel{
@@ -361,6 +374,7 @@ func TestPs(t *testing.T) {
 // --- Health check ---
 
 func TestHealth(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -373,6 +387,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestHealth_FailsOnUnreachable(t *testing.T) {
+	t.Parallel()
 	client := NewClient("http://127.0.0.1:1")
 	srvClient := client.Server()
 	if err := srvClient.Health(context.Background()); err == nil {
@@ -383,6 +398,7 @@ func TestHealth_FailsOnUnreachable(t *testing.T) {
 // --- WaitForReady ---
 
 func TestWaitForReady_AlreadyReady(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -399,6 +415,7 @@ func TestWaitForReady_AlreadyReady(t *testing.T) {
 // --- Version ---
 
 func TestVersion(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"version": "0.1.0"})
 	}))
@@ -416,6 +433,7 @@ func TestVersion(t *testing.T) {
 // --- BlobExists ---
 
 func TestBlobExists(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodHead {
 			t.Errorf("expected HEAD, got %s", r.Method)
@@ -434,6 +452,7 @@ func TestBlobExists(t *testing.T) {
 }
 
 func TestBlobExists_NotFound(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -451,6 +470,7 @@ func TestBlobExists_NotFound(t *testing.T) {
 // --- HTTP error handling ---
 
 func TestAPIError(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSON(w, map[string]string{"error": "bad request"})
@@ -473,6 +493,7 @@ func TestAPIError(t *testing.T) {
 }
 
 func TestAPIServerError(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSON(w, map[string]string{"error": "internal error"})
@@ -494,6 +515,7 @@ func TestAPIServerError(t *testing.T) {
 // --- Context cancellation ---
 
 func TestContextCancellation(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		flusher := w.(http.Flusher)
 		w.Header().Set("Content-Type", "application/x-ndjson")
@@ -519,6 +541,7 @@ func TestContextCancellation(t *testing.T) {
 // --- Client option ---
 
 func TestWithHTTPClient(t *testing.T) {
+	t.Parallel()
 	customClient := &http.Client{}
 	client := NewClient("http://localhost:11434", WithHTTPClient(customClient))
 	if client.httpClient != customClient {
@@ -529,6 +552,7 @@ func TestWithHTTPClient(t *testing.T) {
 // --- BaseURL ---
 
 func TestBaseURL(t *testing.T) {
+	t.Parallel()
 	client := NewClient("http://localhost:11434/")
 	if client.BaseURL() != "http://localhost:11434" {
 		t.Errorf("expected trimmed base URL, got %q", client.BaseURL())
@@ -538,6 +562,7 @@ func TestBaseURL(t *testing.T) {
 // --- FindExecutable (just returns empty or something, should not panic) ---
 
 func TestFindExecutable_NoPanic(t *testing.T) {
+	t.Parallel()
 	client := NewClient("http://localhost:11434")
 	_ = client.Server().FindExecutable()
 }
@@ -545,6 +570,7 @@ func TestFindExecutable_NoPanic(t *testing.T) {
 // --- Empty chat response ---
 
 func TestChat_EmptyResponse(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeNDJSON(w, []string{
 			`{"message":{"content":""},"done":true}`,
@@ -564,6 +590,7 @@ func TestChat_EmptyResponse(t *testing.T) {
 // --- Generate empty response ---
 
 func TestGenerate_EmptyResponse(t *testing.T) {
+	t.Parallel()
 	srv, client := newTestServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeNDJSON(w, []string{
 			`{"response":"","done":true}`,

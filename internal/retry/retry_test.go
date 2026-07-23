@@ -12,6 +12,7 @@ func fastCfg() Config {
 }
 
 func TestDo_SucceedsFirstTry(t *testing.T) {
+	t.Parallel()
 	calls := 0
 	err := Do(context.Background(), fastCfg(), func(ctx context.Context, attempt int) error {
 		calls++
@@ -26,6 +27,7 @@ func TestDo_SucceedsFirstTry(t *testing.T) {
 }
 
 func TestDo_RetriesTransientThenSucceeds(t *testing.T) {
+	t.Parallel()
 	calls := 0
 	err := Do(context.Background(), fastCfg(), func(ctx context.Context, attempt int) error {
 		calls++
@@ -43,6 +45,7 @@ func TestDo_RetriesTransientThenSucceeds(t *testing.T) {
 }
 
 func TestDo_PermanentErrorStopsImmediately(t *testing.T) {
+	t.Parallel()
 	calls := 0
 	sentinel := errors.New("404 not found")
 	err := Do(context.Background(), fastCfg(), func(ctx context.Context, attempt int) error {
@@ -58,6 +61,7 @@ func TestDo_PermanentErrorStopsImmediately(t *testing.T) {
 }
 
 func TestDo_ExhaustsAttemptsAndReturnsLastError(t *testing.T) {
+	t.Parallel()
 	calls := 0
 	err := Do(context.Background(), fastCfg(), func(ctx context.Context, attempt int) error {
 		calls++

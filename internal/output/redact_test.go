@@ -3,6 +3,7 @@ package output
 import "testing"
 
 func TestSecrets(t *testing.T) {
+	t.Parallel()
 	in := "error calling https://api.example.com/v1?key=AQ.Ab8RN6ICUPTuMsp got 404"
 	got := Secrets(in, "AQ.Ab8RN6ICUPTuMsp")
 	if got == in {
@@ -14,6 +15,7 @@ func TestSecrets(t *testing.T) {
 }
 
 func TestSecrets_EmptySecretIgnored(t *testing.T) {
+	t.Parallel()
 	in := "no secrets here"
 	got := Secrets(in, "")
 	if got != in {
@@ -22,6 +24,7 @@ func TestSecrets_EmptySecretIgnored(t *testing.T) {
 }
 
 func TestURLQueryParam(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		url   string

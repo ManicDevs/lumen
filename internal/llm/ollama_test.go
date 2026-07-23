@@ -14,6 +14,7 @@ import (
 )
 
 func TestSendOllama_SlowButSteadyStream_DoesNotTimeOut(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		flusher := w.(http.Flusher)
 		w.Header().Set("Content-Type", "application/x-ndjson")
@@ -41,6 +42,7 @@ func TestSendOllama_SlowButSteadyStream_DoesNotTimeOut(t *testing.T) {
 }
 
 func TestSendOllama_SilentStream_TimesOutButPreservesPartial(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		flusher := w.(http.Flusher)
 		w.Header().Set("Content-Type", "application/x-ndjson")
@@ -62,6 +64,7 @@ func TestSendOllama_SilentStream_TimesOutButPreservesPartial(t *testing.T) {
 }
 
 func TestSendOllama_NoContentBeforeFailure_ReturnsNoPartial(t *testing.T) {
+	t.Parallel()
 	eng := NewLocalEngine("http://127.0.0.1:1", "test-model", "sys", 8192, 200*time.Millisecond, retry.Config{}, slog.Default())
 
 	reply, err := eng.Send(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil)

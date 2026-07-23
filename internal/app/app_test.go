@@ -6,6 +6,7 @@ import (
 )
 
 func TestParseFlags_Defaults(t *testing.T) {
+	t.Parallel()
 	f := ParseFlags([]string{})
 	if f.AutoMode {
 		t.Error("expected AutoMode=false")
@@ -16,6 +17,7 @@ func TestParseFlags_Defaults(t *testing.T) {
 }
 
 func TestParseFlags_AutoWithGoal(t *testing.T) {
+	t.Parallel()
 	f := ParseFlags([]string{"--auto", "fix the bugs"})
 	if !f.AutoMode {
 		t.Error("expected AutoMode=true")
@@ -26,6 +28,7 @@ func TestParseFlags_AutoWithGoal(t *testing.T) {
 }
 
 func TestParseFlags_AutoNoGoal(t *testing.T) {
+	t.Parallel()
 	f := ParseFlags([]string{"--auto"})
 	if !f.AutoMode {
 		t.Error("expected AutoMode=true")
@@ -36,6 +39,7 @@ func TestParseFlags_AutoNoGoal(t *testing.T) {
 }
 
 func TestParseFlags_LiveOutput(t *testing.T) {
+	t.Parallel()
 	f := ParseFlags([]string{"--auto", "test", "--live-output"})
 	if !f.LiveOutput {
 		t.Error("expected LiveOutput=true")
@@ -43,6 +47,7 @@ func TestParseFlags_LiveOutput(t *testing.T) {
 }
 
 func TestParseFlags_TargetPath(t *testing.T) {
+	t.Parallel()
 	f := ParseFlags([]string{"/some/path"})
 	if f.TargetPath != "/some/path" {
 		t.Errorf("expected TargetPath='/some/path', got %q", f.TargetPath)
@@ -50,6 +55,7 @@ func TestParseFlags_TargetPath(t *testing.T) {
 }
 
 func TestParseFlags_AutoSandbox(t *testing.T) {
+	t.Parallel()
 	f := ParseFlags([]string{"--auto-sandbox", "/path"})
 	if !f.AutoSandbox {
 		t.Error("expected AutoSandbox=true")
@@ -60,6 +66,7 @@ func TestParseFlags_AutoSandbox(t *testing.T) {
 }
 
 func TestParseFlags_TrainAndDataset(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		args  []string
 		name  string
@@ -82,6 +89,7 @@ func TestParseFlags_TrainAndDataset(t *testing.T) {
 }
 
 func TestParseFlags_Topic(t *testing.T) {
+	t.Parallel()
 	f := ParseFlags([]string{"--topic", "code review"})
 	if f.CustomTopic != "code review" {
 		t.Errorf("expected topic 'code review', got %q", f.CustomTopic)
@@ -89,6 +97,7 @@ func TestParseFlags_Topic(t *testing.T) {
 }
 
 func TestParseFlags_HelpExits(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("TEST_HELP_EXIT") == "1" {
 		ParseFlags([]string{"--help"})
 		return
@@ -96,10 +105,12 @@ func TestParseFlags_HelpExits(t *testing.T) {
 }
 
 func TestPrintUsage_DoesNotPanic(t *testing.T) {
+	t.Parallel()
 	PrintUsage()
 }
 
 func TestParseFlags_VersionExits(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("TEST_VERSION_EXIT") == "1" {
 		ParseFlags([]string{"--version"})
 		return
