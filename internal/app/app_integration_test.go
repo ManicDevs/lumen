@@ -230,7 +230,7 @@ func TestCopyDir_EmptyDir(t *testing.T) {
 }
 
 func TestRunDatasetInit(t *testing.T) {
-	t.Parallel()
+	// Cannot use t.Parallel — os.Chdir is process-global
 	dir := t.TempDir()
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
@@ -250,7 +250,7 @@ func TestRunEasterEgg(t *testing.T) {
 }
 
 func TestRunTrain_NoCommits(t *testing.T) {
-	t.Parallel()
+	// Cannot use t.Parallel — os.Chdir is process-global
 	dir := t.TempDir()
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
