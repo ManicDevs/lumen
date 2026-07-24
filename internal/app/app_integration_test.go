@@ -158,6 +158,14 @@ func TestCopyFile(t *testing.T) {
 	}
 }
 
+func TestCopyFile_NonexistentSource(t *testing.T) {
+	t.Parallel()
+	err := copyFile("/nonexistent/src.txt", "/tmp/dst.txt")
+	if err == nil {
+		t.Error("expected error for nonexistent source")
+	}
+}
+
 func TestCopyDir(t *testing.T) {
 	t.Parallel()
 
@@ -182,26 +190,76 @@ func TestCopyDir(t *testing.T) {
 	}
 }
 
-func TestRunDatasetInit(t *testing.T) {
+func TestCopyDir_NestedDirectories(t *testing.T) {
 	t.Parallel()
 
-	// runDatasetInit changes working directory, so we skip if it fails
-	// This is a smoke test
-	_ = time.Now() // ensure time package is used
+	srcDir := t.TempDir()
+	dstDir := t.TempDir() + "/dst"
+
+	os.MkdirAll(srcDir+"/sub", 0755)
+	writeFile(srcDir+"/sub/nested.txt", "nested content")
+	writeFile(srcDir+"/top.txt", "top content")
+
+	if err := copyDir(srcDir, dstDir); err != nil {
+		t.Fatalf("copyDir failed: %v", err)
+	}
+
+	content, _ := readFile(dstDir + "/sub/nested.txt")
+	if content != "nested content" {
+		t.Errorf("expected 'nested content', got %q", content)
+	}
+	content, _ = readFile(dstDir + "/top.txt")
+	if content != "top content" {
+		t.Errorf("expected 'top content', got %q", content)
+	}
+}
+
+func TestCopyDir_EmptyDir(t *testing.T) {
+	t.Parallel()
+	srcDir := t.TempDir()
+	dstDir := t.TempDir() + "/dst"
+
+	if err := copyDir(srcDir, dstDir); err != nil {
+		t.Fatalf("copyDir empty: %v", err)
+	}
+
+	entries, _ := listDir(dstDir)
+	if len(entries) != 0 {
+		t.Errorf("expected empty dir, got %d entries", len(entries))
+	}
+}
+
+func TestRunDatasetInit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
+
+	code := runDatasetInit()
+	if code != 0 {
+		t.Errorf("runDatasetInit exit code = %d, want 0", code)
+	}
 }
 
 func TestRunEasterEgg(t *testing.T) {
 	t.Parallel()
-
-	// runEasterEgg requires ollama, so just test it returns error gracefully
-	_ = runEasterEgg("http://localhost:1", Flags{CustomTopic: "test"})
+	code := runEasterEgg("http://localhost:1", Flags{CustomTopic: "test"})
+	// RunGenerate with pipe=false gracefully returns 0 even on connection failure
+	_ = code
 }
 
-func TestRunTrain(t *testing.T) {
+func TestRunTrain_NoCommits(t *testing.T) {
 	t.Parallel()
+	dir := t.TempDir()
+	orig, _ := os.Getwd()
+	os.Chdir(dir)
+	defer os.Chdir(orig)
 
-	// runTrain requires ollama, so just test it returns error gracefully
-	_ = runTrain("http://localhost:1", "test-model", false)
+	code := runTrain("http://localhost:1", "test-model", false)
+	if code != 0 {
+		t.Errorf("runTrain with no commits should return 0, got %d", code)
+	}
 }
 
 func TestRunAuto(t *testing.T) {
