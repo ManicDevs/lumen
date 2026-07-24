@@ -28,9 +28,9 @@ type AuditEntry struct {
 }
 
 type AuditLogConfig struct {
-	SyncOnWrite       bool `json:"sync_on_write"`
-	MaxFileSize       int64 `json:"max_file_size"`
-	CompressionLevel  int   `json:"compression_level"`
+	SyncOnWrite      bool  `json:"sync_on_write"`
+	MaxFileSize      int64 `json:"max_file_size"`
+	CompressionLevel int   `json:"compression_level"`
 }
 
 func NewAuditLog(configPath string) (*AuditLog, error) {

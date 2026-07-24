@@ -11,6 +11,30 @@ env:
   GOFLAGS: "-trimpath"
 
 jobs:
+  # ── Format & Vet ──────────────────────────────────────────────────────
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: |
+          DIFF=$(gofmt -s -d .)
+          if [ -n "$DIFF" ]; then echo "$DIFF"; exit 1; fi
+
+  vet:
+    name: Vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: go vet ./...
+
+  # ── Lint ──────────────────────────────────────────────────────────────
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -24,38 +48,47 @@ jobs:
           version: latest
           args: --timeout=5m
 
+  # ── Build matrix (linux/amd64, darwin/arm64, windows/amd64) ──────────
   build:
-    name: Build
+    name: Build ${{ matrix.os }}/${{ matrix.arch }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: windows
+            arch: amd64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - run: go build ./cmd/lumen/
-
-  vet:
-    name: Vet
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - run: GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -trimpath -ldflags="-s -w" -o bin/lumen-${{ matrix.os }}-${{ matrix.arch }} ./cmd/lumen/
+      - uses: actions/upload-artifact@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
-      - run: go vet ./...
+          name: lumen-${{ matrix.os }}-${{ matrix.arch }}
+          path: bin/lumen-${{ matrix.os }}-${{ matrix.arch }}
 
+  # ── Test (matrix: go versions) ───────────────────────────────────────
   test:
-    name: Test
+    name: Test (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.24", "1.25"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: ${{ matrix.go-version }}
       - run: go test -count=1 ./...
 
+  # ── Race detector ─────────────────────────────────────────────────────
   race:
-    name: Race
+    name: Race Detector
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +97,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - run: go test -race -count=1 ./...
 
+  # ── Coverage ──────────────────────────────────────────────────────────
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
@@ -74,3 +108,50 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - run: go test -count=1 -coverprofile=cover.out ./...
       - run: go tool cover -func=cover.out
+      - run: |
+          COV=$(go tool cover -func=cover.out | tail -1 | awk '{print $NF}' | tr -d '%')
+          echo "coverage=$COV" >> $GITHUB_OUTPUT
+          echo "## Coverage: ${COV}%" >> $GITHUB_STEP_SUMMARY
+        id: coverage
+
+  # ── Security audit ───────────────────────────────────────────────────
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  # ── Module verification ──────────────────────────────────────────────
+  verify:
+    name: Verify Modules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: |
+          go mod tidy
+          go mod verify
+          git diff --exit-code go.mod go.sum || (echo "go.mod/go.sum dirty after tidy" && exit 1)
+
+  # ── Binary size check ────────────────────────────────────────────────
+  binary-size:
+    name: Binary Size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: |
+          go build -trimpath -ldflags="-s -w" -o bin/lumen ./cmd/lumen/
+          SIZE=$(stat -c%s bin/lumen 2>/dev/null || stat -f%z bin/lumen)
+          echo "## Binary Size: $(echo "scale=1; $SIZE/1024/1024" | bc) MB" >> $GITHUB_STEP_SUMMARY
+          echo "Binary size: $SIZE bytes"

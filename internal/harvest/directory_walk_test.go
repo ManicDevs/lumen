@@ -12,13 +12,13 @@ func TestDirectoryWalk_Complete(t *testing.T) {
 	dir := t.TempDir()
 
 	files := map[string]string{
-		"a.go":       "package main\nfunc main() {}\n",
-		"b.py":       "# comment\nprint('hello')\n",
-		"c.js":       "// comment\nconsole.log('hi');\n",
-		"d.txt":      "plain text\n",
-		"e.md":       "# markdown\n",
-		"sub/x.go":   "package sub\n",
-		"sub/y.py":   "# python\n",
+		"a.go":     "package main\nfunc main() {}\n",
+		"b.py":     "# comment\nprint('hello')\n",
+		"c.js":     "// comment\nconsole.log('hi');\n",
+		"d.txt":    "plain text\n",
+		"e.md":     "# markdown\n",
+		"sub/x.go": "package sub\n",
+		"sub/y.py": "# python\n",
 	}
 
 	for name, content := range files {
@@ -32,13 +32,13 @@ func TestDirectoryWalk_Complete(t *testing.T) {
 	}
 
 	expected := map[string]bool{
-		"a.go":       true,
-		"b.py":       true,
-		"c.js":       true,
-		"d.txt":      true,
-		"e.md":       true,
-		"x.go":       true,
-		"y.py":       true,
+		"a.go":  true,
+		"b.py":  true,
+		"c.js":  true,
+		"d.txt": true,
+		"e.md":  true,
+		"x.go":  true,
+		"y.py":  true,
 	}
 
 	directoryWalkTestHelper(t, dir, expected)
@@ -50,10 +50,10 @@ func TestDirectoryWalk_ExcludesTestAndBinFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	files := map[string]string{
-		"main.go":         "package main\n",
-		"main_test.go":    "package main\n",
-		"binary-bin":      "binary content\n",
-		"regular.txt":     "text\n",
+		"main.go":      "package main\n",
+		"main_test.go": "package main\n",
+		"binary-bin":   "binary content\n",
+		"regular.txt":  "text\n",
 	}
 
 	for name, content := range files {
@@ -67,8 +67,8 @@ func TestDirectoryWalk_ExcludesTestAndBinFiles(t *testing.T) {
 	// We expect them to be found by the walk but filtered by Context
 	expected := map[string]bool{
 		"main.go":      true,
-		"main_test.go": true,  // found by walk, filtered by Context
-		"binary-bin":   true,  // found by walk, filtered by Context
+		"main_test.go": true, // found by walk, filtered by Context
+		"binary-bin":   true, // found by walk, filtered by Context
 		"regular.txt":  true,
 	}
 

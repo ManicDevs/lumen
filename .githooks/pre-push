@@ -1,0 +1,19 @@
+#!/bin/bash
+# =============================================================================
+# Lumen — Git pre-push hook
+# Installs: make hooks-install
+# =============================================================================
+set -euo pipefail
+
+echo "Running pre-push checks..."
+echo ""
+
+# Quick test run before push
+if ! go test -count=1 ./... 2>&1; then
+    echo ""
+    echo "Fix failing tests before pushing."
+    exit 1
+fi
+
+echo ""
+echo "Pre-push checks passed."

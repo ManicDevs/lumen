@@ -1,0 +1,18 @@
+# =============================================================================
+# Lumen — .dockerignore
+# =============================================================================
+.git
+bin/
+build/
+data/
+.env
+*.md
+.golangci.yml
+.editorconfig
+.vscode/
+.github/
+.githooks/
+cover.out
+Makefile
+ANALYSIS.md
+CONTRIBUTING.md

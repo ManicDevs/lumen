@@ -5,6 +5,7 @@
 #         make all           — vet + lint + test + build (default)
 #         make quick         — fast feedback: vet + test + build
 #         make ci            — full CI pipeline
+#         make setup         — install hooks + tools
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := all
@@ -29,26 +30,32 @@ GOTEST_FLAGS := -count=1
 # ── Directories ───────────────────────────────────────────────────────────────
 COVERDIR  := build/coverage
 BENCHDIR  := build/bench
+PROFDIR   := build/profiles
 
-# ── Go version for compat check ──────────────────────────────────────────────
-MIN_GO    := 1.21
+# ── Platforms for cross-compilation ───────────────────────────────────────────
+PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
 # =============================================================================
 # TARGETS
 # =============================================================================
 
-.PHONY: all quick ci
-.PHONY: build build-release install uninstall
-.PHONY: test test-verbose test-short test-package test-race test-3x
-.PHONY: bench bench-mem bench-compare
+.PHONY: all quick ci check
+.PHONY: build build-release build-all install uninstall
+.PHONY: test test-verbose test-short test-race test-3x test-bench test-integration
+.PHONY: bench bench-mem bench-cpu bench-compare
 .PHONY: fuzz fuzz-corpus
-.PHONY: cover cover-html cover-func cover-xml cover-open cover-clean
+.PHONY: cover cover-html cover-func cover-xml cover-open cover-clean cover-badge
+.PHONY: profile profile-cpu profile-mem profile-block profile-trace
 .PHONY: vet lint fmt fmt-check imports staticcheck
-.PHONY: check verify tidy download
+.PHONY: check verify tidy download deps deps-verify
+.PHONY: audit vuln
 .PHONY: clean clean-all
-.PHONY: docker docker-push
-.PHONY: release release-snapshot
+.PHONY: docker docker-run docker-shell docker-push
+.PHONY: release release-snapshot tag
 .PHONY: docs godoc
+.PHONY: setup hooks-install hooks-uninstall
+.PHONY: generate stringer
+.PHONY: metrics loc complexity
 .PHONY: help env info version
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -64,8 +71,34 @@ quick: vet test build
 ci: check test-race lint build
 	@echo "==> CI pipeline passed."
 
-check: fmt-check vet lint
+check: fmt-check vet lint audit
 	@echo "==> Static checks passed."
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Setup
+# ──────────────────────────────────────────────────────────────────────────────
+
+setup: hooks-install
+	@echo "==> Installing development tools..."
+	@which golangci-lint > /dev/null 2>&1 || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@which govulncheck > /dev/null 2>&1 || go install golang.org/x/vuln/cmd/govulncheck@latest
+	@which goimports > /dev/null 2>&1 || go install golang.org/x/tools/cmd/goimports@latest
+	@which benchstat > /dev/null 2>&1 || go install golang.org/x/perf/cmd/benchstat@latest
+	@echo "==> Setup complete."
+
+hooks-install:
+	@echo "==> Installing git hooks"
+	@mkdir -p .git/hooks
+	@cp .githooks/pre-commit .git/hooks/pre-commit
+	@cp .githooks/pre-push .git/hooks/pre-push
+	@cp .githooks/commit-msg .git/hooks/commit-msg
+	@chmod +x .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/commit-msg
+	@echo "==> Git hooks installed."
+
+hooks-uninstall:
+	@echo "==> Removing git hooks"
+	@rm -f .git/hooks/pre-commit .git/hooks/pre-push .git/hooks/commit-msg
+	@echo "==> Git hooks removed."
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Build
@@ -80,6 +113,19 @@ build-release:
 	@echo "==> Building release binary (stripped, static)"
 	CGO_ENABLED=0 go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/lumen/
 	@echo "==> Binary: $(BIN)"
+
+build-all:
+	@echo "==> Building for all platforms"
+	@mkdir -p dist
+	@for platform in $(PLATFORMS); do \
+		os=$${platform%/*}; arch=$${platform#*/}; \
+		ext=""; if [ "$$os" = "windows" ]; then ext=".exe"; fi; \
+		echo "  $$os/$$arch"; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 go build $(GOFLAGS) -ldflags "$(LDFLAGS)" \
+			-o dist/lumen-$$os-$$arch$$ext ./cmd/lumen/; \
+	done
+	@echo "==> Binaries in dist/"
+	@ls -lh dist/
 
 install:
 	@echo "==> Installing to $(GOPATH)/bin/lumen"
@@ -105,10 +151,6 @@ test-short:
 	@echo "==> Running tests (short mode)"
 	$(GOTEST) $(GOTEST_FLAGS) -short ./...
 
-test-package:
-	@echo "==> Running tests for package: $(PKG)"
-	$(GOTEST) $(GOTEST_FLAGS) -v -run $(PKG) ./...
-
 test-race:
 	@echo "==> Running tests with race detector"
 	$(GOTEST) $(GOTEST_FLAGS) -race ./...
@@ -121,24 +163,69 @@ test-bench:
 	@echo "==> Running tests with benchmarks"
 	$(GOTEST) $(GOTEST_FLAGS) -bench=. -benchmem ./...
 
+test-integration:
+	@echo "==> Running integration tests (requires Ollama)"
+	$(GOTEST) $(GOTEST_FLAGS) -tags=integration -v ./...
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Benchmarks
 # ──────────────────────────────────────────────────────────────────────────────
 
 bench:
 	@echo "==> Running benchmarks"
-	$(GOTEST) -bench=. -benchmem -count=3 ./... | tee $(BENCHDIR)/bench.txt
+	@mkdir -p $(BENCHDIR)
+	$(GOTEST) -bench=. -benchmem -count=5 ./... | tee $(BENCHDIR)/bench.txt
+	@echo "==> Results saved to $(BENCHDIR)/bench.txt"
 
 bench-mem:
 	@echo "==> Running benchmarks (memory profile)"
-	mkdir -p $(BENCHDIR)
+	@mkdir -p $(BENCHDIR)
 	$(GOTEST) -bench=. -benchmem -memprofile=$(BENCHDIR)/mem.out ./...
 	go tool pprof -alloc_space -top $(BENCHDIR)/mem.out
+
+bench-cpu:
+	@echo "==> Running benchmarks (CPU profile)"
+	@mkdir -p $(BENCHDIR)
+	$(GOTEST) -bench=. -cpuprofile=$(BENCHDIR)/cpu.out ./...
+	go tool pprof -top $(BENCHDIR)/cpu.out
 
 bench-compare:
 	@echo "==> Comparing benchmark results"
 	@which benchstat > /dev/null 2>&1 || (echo "Install benchstat: go install golang.org/x/perf/cmd/benchstat@latest" && exit 1)
 	benchstat $(BENCHDIR)/bench.txt
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Profiling
+# ──────────────────────────────────────────────────────────────────────────────
+
+profile: profile-cpu
+
+profile-cpu:
+	@echo "==> CPU profile: 30s (http://localhost:6060/debug/pprof/)"
+	@mkdir -p $(PROFDIR)
+	go test -cpuprofile=$(PROFDIR)/cpu.out -run='^$$' -bench=. ./... &
+	@sleep 2; echo "==> Collecting for 30s..."
+	@sleep 30; kill %1 2>/dev/null || true
+	go tool pprof -http=:8080 $(PROFDIR)/cpu.out 2>/dev/null &
+
+profile-mem:
+	@echo "==> Memory profile"
+	@mkdir -p $(PROFDIR)
+	$(GOTEST) -memprofile=$(PROFDIR)/mem.out -run='^$$' -bench=. ./...
+	go tool pprof -http=:8080 $(PROFDIR)/mem.out 2>/dev/null &
+
+profile-block:
+	@echo "==> Block profile"
+	@mkdir -p $(PROFDIR)
+	$(GOTEST) -blockprofile=$(PROFDIR)/block.out -run='^$$' -bench=. ./...
+	go tool pprof $(PROFDIR)/block.out
+
+profile-trace:
+	@echo "==> Execution trace: 5s"
+	@mkdir -p $(PROFDIR)
+	$(GOTEST) -trace=$(PROFDIR)/trace.out -run='^$$' -bench=. ./... &
+	@sleep 5; kill %1 2>/dev/null || true
+	go tool trace $(PROFDIR)/trace.out &
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Fuzz testing
@@ -154,7 +241,7 @@ fuzz:
 
 fuzz-corpus:
 	@echo "==> Collecting fuzz corpus"
-	find . -path "*/testdata/fuzz/*" -type f | head -20
+	@find . -path "*/testdata/fuzz/*" -type f 2>/dev/null | head -20
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Coverage
@@ -162,7 +249,7 @@ fuzz-corpus:
 
 cover:
 	@echo "==> Running tests with coverage"
-	mkdir -p $(COVERDIR)
+	@mkdir -p $(COVERDIR)
 	$(GOTEST) $(GOTEST_FLAGS) -coverprofile=$(COVERDIR)/cover.out ./...
 	@echo ""
 	@echo "── Summary ────────────────────────────────────────────────"
@@ -190,6 +277,11 @@ cover-open: cover-html
 	@which xdg-open > /dev/null 2>&1 && xdg-open $(COVERDIR)/cover.html || \
 	@which open > /dev/null 2>&1 && open $(COVERDIR)/cover.html || \
 	echo "==> Open $(COVERDIR)/cover.html manually"
+
+cover-badge: cover
+	@echo "==> Generating coverage badge"
+	@COV=$$(go tool cover -func=$(COVERDIR)/cover.out | tail -1 | awk '{print $$NF}' | tr -d '%'); \
+	echo "Coverage: $${COV}%"
 
 cover-clean:
 	rm -rf $(COVERDIR)
@@ -235,6 +327,17 @@ staticcheck:
 	staticcheck ./...
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Security
+# ──────────────────────────────────────────────────────────────────────────────
+
+audit: vuln
+
+vuln:
+	@echo "==> Running govulncheck"
+	@which govulncheck > /dev/null 2>&1 || (echo "Install: go install golang.org/x/vuln/cmd/govulncheck@latest" && exit 1)
+	govulncheck ./...
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Dependency management
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -260,13 +363,38 @@ deps-verify: tidy
 	@git diff --exit-code go.mod go.sum || (echo "==> go.mod/go.sum dirty after tidy" && exit 1)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Security
+# Code generation
 # ──────────────────────────────────────────────────────────────────────────────
 
-audit:
-	@echo "==> Running govulncheck"
-	@which govulncheck > /dev/null 2>&1 || (echo "Install: go install golang.org/x/vuln/cmd/govulncheck@latest" && exit 1)
-	govulncheck ./...
+generate:
+	@echo "==> Running go generate"
+	go generate ./...
+
+stringer:
+	@echo "==> Running stringer"
+	@which stringer > /dev/null 2>&1 || go install golang.org/x/tools/cmd/stringer@latest
+	go generate ./...
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Code metrics
+# ──────────────────────────────────────────────────────────────────────────────
+
+loc:
+	@echo "==> Lines of code (Go files)"
+	@find . -name '*.go' -not -path './vendor/*' -not -path './.git/*' | xargs wc -l | tail -1
+	@echo ""
+	@echo "── Per package ──────────────────────────────────────────"
+	@for pkg in $$(find . -name '*.go' -not -path './vendor/*' -not -path './.git/*' -exec dirname {} \; | sort -u); do \
+		count=$$(find $$pkg -maxdepth 1 -name '*.go' | xargs wc -l 2>/dev/null | tail -1 | awk '{print $$1}'); \
+		if [ "$$count" -gt 0 ] 2>/dev/null; then \
+			echo "  $$count  $$pkg"; \
+		fi; \
+	done
+
+complexity:
+	@echo "==> Cyclomatic complexity"
+	@which gocyclo > /dev/null 2>&1 || (echo "Install: go install github.com/fzipp/gocyclo/cmd/gocyclo@latest" && exit 1)
+	gocyclo -top 20 .
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Docker
@@ -274,7 +402,18 @@ audit:
 
 docker:
 	@echo "==> Building Docker image"
-	docker build -t lumen:$(VERSION) -t lumen:latest .
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		-t lumen:$(VERSION) -t lumen:latest .
+
+docker-run: docker
+	@echo "==> Running Docker container"
+	docker run --rm -it --network=host lumen:latest --chat
+
+docker-shell: docker
+	@echo "==> Opening Docker shell"
+	docker run --rm -it --network=host --entrypoint /bin/sh lumen:latest
 
 docker-push: docker
 	@echo "==> Pushing Docker image"
@@ -285,14 +424,20 @@ docker-push: docker
 # Release
 # ──────────────────────────────────────────────────────────────────────────────
 
-release: clean ci build-release
-	@echo "==> Release binary ready: $(BIN)"
-	@ls -lh $(BIN)
+release: clean ci build-all
+	@echo "==> Release binaries ready in dist/"
+	@ls -lh dist/
 
 release-snapshot: clean
 	@echo "==> Building snapshot release"
 	@which goreleaser > /dev/null 2>&1 || (echo "Install: go install github.com/goreleaser/goreleaser@latest" && exit 1)
 	goreleaser release --snapshot --clean
+
+tag:
+	@echo "==> Creating git tag"
+	@read -p "Tag version (vX.Y.Z): " tag; \
+	git tag -a $$tag -m "Release $$tag" && \
+	echo "==> Tagged $$tag — push with: git push origin $$tag"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Documentation
@@ -300,7 +445,7 @@ release-snapshot: clean
 
 docs:
 	@echo "==> Generating documentation"
-	mkdir -p build/docs
+	@mkdir -p build/docs
 	@for pkg in $$(go list ./...); do \
 		name=$$(echo $$pkg | sed 's|$(PKG)/||' | tr '/' '-'); \
 		go doc -all $$pkg > build/docs/$$name.txt 2>/dev/null || true; \
@@ -319,12 +464,12 @@ godoc:
 
 clean:
 	@echo "==> Cleaning build artifacts"
-	rm -rf bin/ build/
+	rm -rf bin/ build/ dist/
 
 clean-all: clean
 	@echo "==> Cleaning Go caches"
 	go clean -cache -testcache
-	rm -rf $(COVERDIR) $(BENCHDIR)
+	rm -rf $(COVERDIR) $(BENCHDIR) $(PROFDIR)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Info / Debug
@@ -350,6 +495,9 @@ info: env
 	@echo "── Packages ──────────────────────────────────────────────"
 	@go list ./... | wc -l
 	@echo "packages total"
+	@echo ""
+	@echo "── Binary ───────────────────────────────────────────────"
+	@ls -lh $(BIN) 2>/dev/null || echo "Not built yet"
 
 version:
 	@$(BIN) --version 2>/dev/null || echo "Binary not built yet"
@@ -367,11 +515,17 @@ help:
 	@echo "    all            Run vet + lint + test + build (default)"
 	@echo "    quick          Fast feedback: vet + test + build"
 	@echo "    ci             Full CI: check + test-race + lint + build"
-	@echo "    check          Static checks: fmt-check + vet + lint"
+	@echo "    check          Static checks: fmt-check + vet + lint + audit"
+	@echo ""
+	@echo "  Setup:"
+	@echo "    setup          Install hooks + development tools"
+	@echo "    hooks-install  Install git pre-commit/push/commit-msg hooks"
+	@echo "    hooks-uninstall Remove git hooks"
 	@echo ""
 	@echo "  Build:"
 	@echo "    build          Build binary to bin/"
 	@echo "    build-release  Build stripped/static release binary"
+	@echo "    build-all      Cross-compile for all platforms (dist/)"
 	@echo "    install        Install to $$GOPATH/bin"
 	@echo "    uninstall      Remove from $$GOPATH/bin"
 	@echo ""
@@ -382,11 +536,20 @@ help:
 	@echo "    test-race      Run tests with race detector"
 	@echo "    test-3x        Stress test: 3x with race detector"
 	@echo "    test-bench     Run tests with benchmarks"
+	@echo "    test-integration Run integration tests (requires Ollama)"
 	@echo ""
 	@echo "  Benchmarks:"
 	@echo "    bench          Run benchmarks (save results)"
 	@echo "    bench-mem      Run benchmarks with memory profile"
-	@echo "    bench-compare  Compare benchmark results"
+	@echo "    bench-cpu      Run benchmarks with CPU profile"
+	@echo "    bench-compare  Compare benchmark results with benchstat"
+	@echo ""
+	@echo "  Profiling:"
+	@echo "    profile        CPU profile (default)"
+	@echo "    profile-cpu    CPU profile for 30s"
+	@echo "    profile-mem    Memory profile"
+	@echo "    profile-block  Block profile"
+	@echo "    profile-trace  Execution trace for 5s"
 	@echo ""
 	@echo "  Fuzz:"
 	@echo "    fuzz           Run fuzz tests for 60s each"
@@ -398,6 +561,7 @@ help:
 	@echo "    cover-func     Show per-function coverage"
 	@echo "    cover-xml      Generate XML coverage report"
 	@echo "    cover-open     Open HTML report in browser"
+	@echo "    cover-badge    Print coverage percentage"
 	@echo "    cover-clean    Remove coverage artifacts"
 	@echo ""
 	@echo "  Analysis:"
@@ -415,12 +579,23 @@ help:
 	@echo "    deps           Show module dependency graph"
 	@echo "    deps-verify    Verify deps + check for unused"
 	@echo ""
+	@echo "  Code Generation:"
+	@echo "    generate       Run go generate"
+	@echo "    stringer       Run stringer for enum types"
+	@echo ""
+	@echo "  Metrics:"
+	@echo "    loc            Lines of code per package"
+	@echo "    complexity     Top 20 cyclomatic complexity"
+	@echo ""
 	@echo "  Release:"
-	@echo "    release        Clean + CI + build release binary"
-	@echo "    release-snapshot  Build snapshot with goreleaser"
+	@echo "    release        Clean + CI + cross-compile all platforms"
+	@echo "    release-snapshot Build snapshot with goreleaser"
+	@echo "    tag            Create a git tag interactively"
 	@echo ""
 	@echo "  Docker:"
 	@echo "    docker         Build Docker image"
+	@echo "    docker-run     Build and run in Docker (chat mode)"
+	@echo "    docker-shell   Build and open shell in Docker"
 	@echo "    docker-push    Push Docker image"
 	@echo ""
 	@echo "  Documentation:"
@@ -428,7 +603,7 @@ help:
 	@echo "    godoc          Start local godoc server"
 	@echo ""
 	@echo "  Utilities:"
-	@echo "    clean          Remove bin/ and build/"
+	@echo "    clean          Remove bin/, build/, dist/"
 	@echo "    clean-all      Clean + Go caches"
 	@echo "    env            Show build variables"
 	@echo "    info           Show project and Go environment"
