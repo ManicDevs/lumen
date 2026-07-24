@@ -28,27 +28,27 @@ type AuditEntry struct {
 }
 
 type AuditLogConfig struct {
-	SyncOnWrite        bool `json:"sync_on_write"`
-	MaxFileSize        int64 `json:"max_file_size"`
-	CompressionLevel   int   `json:"compression_level"`
+	SyncOnWrite       bool `json:"sync_on_write"`
+	MaxFileSize       int64 `json:"max_file_size"`
+	CompressionLevel  int   `json:"compression_level"`
 }
 
 func NewAuditLog(configPath string) (*AuditLog, error) {
 	if configPath == "" {
 		configPath = "/var/log/lumen/audit.jsonl"
 	}
-	
+
 	if _, err := os.Stat(filepath.Dir(configPath)); err != nil {
 		if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 			return nil, fmt.Errorf("failed to create log directory: %w", err)
 		}
 	}
-	
+
 	log, err := os.OpenFile(configPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open audit log: %w", err)
 	}
-	
+
 	return &AuditLog{
 		logWriter: log,
 		filePath:  configPath,
@@ -58,13 +58,13 @@ func NewAuditLog(configPath string) (*AuditLog, error) {
 func (al *AuditLog) Add(entry AuditEntry) error {
 	al.mu.Lock()
 	defer al.mu.Unlock()
-	
-	al.entries = append(al.entries, entry)
-	
+
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now()
 	}
-	
+
+	al.entries = append(al.entries, entry)
+
 	if al.logWriter != nil {
 		data, err := json.Marshal(entry)
 		if err != nil {
@@ -75,7 +75,7 @@ func (al *AuditLog) Add(entry AuditEntry) error {
 		}
 		al.logWriter.Sync()
 	}
-	
+
 	return nil
 }
 
@@ -113,8 +113,10 @@ func FormatAuditEntry(ctx context.Context, eventType, role string, tokenCount in
 		Role:       role,
 		TokenCount: tokenCount,
 		Details:    details,
-		Error:      err.Error(),
 		Context:    extra,
+	}
+	if err != nil {
+		entry.Error = err.Error()
 	}
 	return entry
 }

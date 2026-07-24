@@ -1,6 +1,7 @@
 package harvest
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,21 +11,19 @@ import (
 )
 
 var (
-	mu sync.Mutex
+	mu                sync.Mutex
+	commentRegexCache = map[string][2]*regexp.Regexp{}
+	reBlankLine       = regexp.MustCompile(`^\s*$`)
 )
 
 func commentRegexesFor(prefix string) (*regexp.Regexp, *regexp.Regexp) {
-	if cached, ok := commentRegexCache[prefix]; ok {
-		return cached[0], cached[1]
-	}
-	
 	mu.Lock()
 	defer mu.Unlock()
-	
+
 	if cached, ok := commentRegexCache[prefix]; ok {
 		return cached[0], cached[1]
 	}
-	
+
 	quoted := regexp.QuoteMeta(prefix)
 	full := regexp.MustCompile(`^\s*` + quoted)
 	trailing := regexp.MustCompile(`\s` + quoted + `.*$`)
@@ -37,14 +36,14 @@ const MaxFileSize = 16 * 1024 * 1024
 func MinifyCode(path string) (string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("harvest: stat %s: %w", path, err)
 	}
 	if info.Size() > MaxFileSize {
-		return "", err
+		return "", fmt.Errorf("harvest: %s is %d bytes (max %d)", path, info.Size(), MaxFileSize)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("harvest: reading %s: %w", path, err)
 	}
 
 	style, _ := commentStyleForPath(path)
@@ -73,14 +72,14 @@ func MinifyCode(path string) (string, error) {
 func ValidateTargetPath(path string) error {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("harvest: path %q could not be resolved: %w", path, err)
 	}
 	info, err := os.Stat(resolved)
 	if err != nil {
-		return err
+		return fmt.Errorf("harvest: path %q not accessible: %w", path, err)
 	}
 	if !info.Mode().IsRegular() && !info.IsDir() {
-		return err
+		return fmt.Errorf("harvest: path %q is neither a regular file nor a directory", path)
 	}
 	return nil
 }
@@ -92,7 +91,7 @@ func Context(targetPath string) (string, error) {
 
 	info, err := os.Stat(targetPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("harvest: %w", err)
 	}
 
 	var b strings.Builder
@@ -133,7 +132,7 @@ func Context(targetPath string) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("walking %s: %w", targetPath, err)
+		return "", fmt.Errorf("harvest: walking %s: %w", targetPath, err)
 	}
 	sort.Strings(files)
 

@@ -7,7 +7,27 @@ import (
 	"testing"
 )
 
+func TestCommentRegexCache_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+	prefixes := []string{"//", "#", "--", ";", "%", "/*"}
+	var wg sync.WaitGroup
+	for _, prefix := range prefixes {
+		for i := 0; i < 20; i++ {
+			wg.Add(1)
+			go func(p string) {
+				defer wg.Done()
+				full, trailing := commentRegexesFor(p)
+				if full == nil || trailing == nil {
+					t.Errorf("commentRegexesFor(%q) returned nil regex", p)
+				}
+			}(prefix)
+		}
+	}
+	wg.Wait()
+}
+
 func TestMinifyCode_ConcurrentSafety(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	files := make([]string, 20)
 	for i := range files {
@@ -49,6 +69,7 @@ func TestMinifyCode_ConcurrentSafety(t *testing.T) {
 }
 
 func TestContext_ConcurrentDirectories(t *testing.T) {
+	t.Parallel()
 	dirs := make([]string, 10)
 	for i := range dirs {
 		dir := t.TempDir()

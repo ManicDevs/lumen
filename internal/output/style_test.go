@@ -1,10 +1,15 @@
 package output
 
-import "os"
+import (
+	"sync"
+	"testing"
+	"time"
+)
 
 func TestSpinner_NonTTYNoops(t *testing.T) {
+	origTTY := TTY
 	TTY = false
-	t.Cleanup(func() { TTY = isTTY })
+	t.Cleanup(func() { TTY = origTTY })
 
 	s := NewSpinner("loading")
 	done := make(chan struct{})
@@ -20,8 +25,9 @@ func TestSpinner_NonTTYNoops(t *testing.T) {
 }
 
 func TestSpinner_StopIdempotent(t *testing.T) {
+	origTTY := TTY
 	TTY = true
-	t.Cleanup(func() { TTY = isTTY })
+	t.Cleanup(func() { TTY = origTTY })
 
 	s := NewSpinner("working")
 	s.Stop()
@@ -29,8 +35,9 @@ func TestSpinner_StopIdempotent(t *testing.T) {
 }
 
 func TestSpinner_ConcurrentStartStop(t *testing.T) {
+	origTTY := TTY
 	TTY = true
-	t.Cleanup(func() { TTY = isTTY })
+	t.Cleanup(func() { TTY = origTTY })
 
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
@@ -46,8 +53,9 @@ func TestSpinner_ConcurrentStartStop(t *testing.T) {
 }
 
 func TestBold_ColorEnabled(t *testing.T) {
+	origColor := colorEnabled
 	colorEnabled = true
-	t.Cleanup(func() { colorEnabled = isTTY && os.Getenv("NO_COLOR") == "" })
+	t.Cleanup(func() { colorEnabled = origColor })
 
 	result := Bold("hello")
 	if result != "\033[1mhello\033[0m" {
@@ -56,7 +64,9 @@ func TestBold_ColorEnabled(t *testing.T) {
 }
 
 func TestBold_ColorDisabled(t *testing.T) {
+	origColor := colorEnabled
 	colorEnabled = false
+	t.Cleanup(func() { colorEnabled = origColor })
 
 	result := Bold("hello")
 	if result != "hello" {
@@ -70,8 +80,9 @@ func TestBold_ColorDisabled(t *testing.T) {
 }
 
 func TestDim_Cyan_Red(t *testing.T) {
+	origColor := colorEnabled
 	colorEnabled = true
-	t.Cleanup(func() { colorEnabled = isTTY && os.Getenv("NO_COLOR") == "" })
+	t.Cleanup(func() { colorEnabled = origColor })
 
 	if got := Dim("dimmed"); got != "\033[2mdimmed\033[0m" {
 		t.Errorf("Dim: got %q", got)
@@ -85,10 +96,20 @@ func TestDim_Cyan_Red(t *testing.T) {
 }
 
 func TestWrap_EmptyString(t *testing.T) {
+	origColor := colorEnabled
 	colorEnabled = true
-	t.Cleanup(func() { colorEnabled = isTTY && os.Getenv("NO_COLOR") == "" })
+	t.Cleanup(func() { colorEnabled = origColor })
 
 	if got := Bold(""); got != "" {
 		t.Errorf("expected empty for empty input, got %q", got)
 	}
+}
+
+func TestSpinner_TextEmpty(t *testing.T) {
+	origTTY := TTY
+	TTY = false
+	t.Cleanup(func() { TTY = origTTY })
+
+	s := NewSpinner("")
+	s.Stop()
 }
