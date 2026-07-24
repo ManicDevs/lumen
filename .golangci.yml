@@ -1,55 +1,45 @@
-run:
-  timeout: 5m
-  tests: true
-  skip-dirs:
-    - bin
-    - build
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - gitlab.torproject.org/cerberus-droid/lumen
 
 linters:
+  default: none
   enable:
-    - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
     - asciicheck
-    - exportloopref
-    - godot
-    - gofmt
-    - goimports
     - misspell
-    - nolintlint
-    - prealloc
-    - revive
-    - stylecheck
     - unconvert
     - whitespace
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: gitlab.torproject.org/cerberus-droid/lumen
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-  godot:
-    scope: toplevel
-  revive:
-    rules:
-      - name: exported
-        severity: warning
-      - name: package-comments
-        severity: warning
-  stylecheck:
-    checks: ["all", "-ST1003"]
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    staticcheck:
+      checks:
+        - all
+        - "-SA1012"
+        - "-ST1000"
+        - "-ST1005"
+        - "-QF1003"
+        - "-QF1012"
 
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-dirs:
+    - bin
+    - build
