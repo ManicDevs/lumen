@@ -1,6 +1,7 @@
 package output
 
 import (
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -26,8 +27,15 @@ func TestSpinner_NonTTYNoops(t *testing.T) {
 
 func TestSpinner_StopIdempotent(t *testing.T) {
 	origTTY := TTY
+	origStdout := os.Stdout
+	_, w, _ := os.Pipe()
+	os.Stdout = w
 	TTY = true
-	t.Cleanup(func() { TTY = origTTY })
+	t.Cleanup(func() {
+		TTY = origTTY
+		w.Close()
+		os.Stdout = origStdout
+	})
 
 	s := NewSpinner("working")
 	s.Stop()
@@ -36,8 +44,15 @@ func TestSpinner_StopIdempotent(t *testing.T) {
 
 func TestSpinner_ConcurrentStartStop(t *testing.T) {
 	origTTY := TTY
+	origStdout := os.Stdout
+	_, w, _ := os.Pipe()
+	os.Stdout = w
 	TTY = true
-	t.Cleanup(func() { TTY = origTTY })
+	t.Cleanup(func() {
+		TTY = origTTY
+		w.Close()
+		os.Stdout = origStdout
+	})
 
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {

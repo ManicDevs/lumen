@@ -81,8 +81,12 @@ func TestRun_TrainAll(t *testing.T) {
 }
 
 func TestRun_ConfigError_InvalidLogLevel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
 	t.Setenv("LOG_LEVEL", "INVALID_LEVEL")
-	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+	t.Setenv("OLLAMA_HOST", srv.URL)
 	code := Run([]string{})
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)

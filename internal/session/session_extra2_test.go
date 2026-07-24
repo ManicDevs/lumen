@@ -1,6 +1,7 @@
 package session
 
 import (
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 func TestWrite_MarshalError(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.Default()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	auditLog, err := OpenAuditLog(filepath.Join(dir, "audit.jsonl"), logger)
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +75,7 @@ func TestOpenAuditLog_BadPath(t *testing.T) {
 func TestWrite_FileClosed(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	logger := slog.Default()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	auditLog, err := OpenAuditLog(filepath.Join(dir, "audit.jsonl"), logger)
 	if err != nil {
 		t.Fatal(err)

@@ -20,6 +20,7 @@
   "lsp": {
     "go": {
       "command": ["gopls"],
+      "extensions": [".go"],
       "initialization": {
         "formatting.gofmt": true,
         "formatting.local": "gitlab.torproject.org/cerberus-droid/lumen",

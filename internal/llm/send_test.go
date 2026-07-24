@@ -291,7 +291,12 @@ func TestOllama_Send_EmptyResponse(t *testing.T) {
 
 func TestOllama_Send_ConnectionRefused(t *testing.T) {
 	t.Parallel()
-	eng := NewLocalEngine("http://localhost:1", "m", "sys", 8192, 5*time.Second, retry.Config{MaxAttempts: 1, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond}, slog.Default())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	eng := NewLocalEngine(srv.URL, "m", "sys", 8192, 5*time.Second, retry.Config{MaxAttempts: 1, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond}, slog.Default())
 	_, err := eng.Send(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil)
 	if err == nil {
 		t.Error("expected error for connection refused")

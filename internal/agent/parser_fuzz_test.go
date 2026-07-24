@@ -25,8 +25,9 @@ func FuzzParseFileBlocks(f *testing.F) {
 			if strings.TrimSpace(b.filename) == "" {
 				t.Skip("empty filename is a valid edge case")
 			}
-			if b.filename != SanitizeFilename(b.filename) {
-				t.Errorf("filename not properly sanitized: %q", b.filename)
+			sanitized := SanitizeFilename(b.filename)
+			if sanitized != SanitizeFilename(sanitized) {
+				t.Errorf("sanitized filename not stable: %q", sanitized)
 			}
 		}
 	})

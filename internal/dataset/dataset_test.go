@@ -367,12 +367,18 @@ func TestRunGenerate_EmptyTopic(t *testing.T) {
 }
 
 func TestRunGenerate_ConnectionFailure(t *testing.T) {
+	// Use a mock server that returns an error
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
 	dir := t.TempDir()
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
 	defer os.Chdir(orig)
 
-	err := RunGenerate("test-model", "http://localhost:1", false, false, "test")
+	err := RunGenerate("test-model", srv.URL, false, false, "test")
 	if err != nil {
 		t.Errorf("RunGenerate connection failure should return nil, got: %v", err)
 	}
@@ -384,7 +390,14 @@ func TestRunTrain_NoCommits(t *testing.T) {
 	os.Chdir(dir)
 	defer os.Chdir(orig)
 
-	err := RunTrain("http://localhost:1", "base-model", false)
+	// Use an unreachable URL (localhost:1 will fail fast)
+	// We use a mock server that returns error to avoid real connection attempts
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	err := RunTrain(srv.URL, "base-model", false)
 	if err != nil {
 		t.Errorf("RunTrain no commits: %v", err)
 	}
@@ -529,7 +542,12 @@ func TestRunTrain_CommitsNoDatapoints(t *testing.T) {
 	data, _ := json.MarshalIndent(commit, "", "  ")
 	os.WriteFile(filepath.Join(commitsDir, "commit_empty1.json"), data, 0644)
 
-	err := RunTrain("http://localhost:1", "base", false)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	err := RunTrain(srv.URL, "base", false)
 	if err != nil {
 		t.Errorf("commits with no datapoints should return nil, got: %v", err)
 	}

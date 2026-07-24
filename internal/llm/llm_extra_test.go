@@ -39,7 +39,12 @@ func TestOpenAI_Send_500_Retriable_Then_Success2(t *testing.T) {
 
 func TestOpenAI_Send_NetworkError2(t *testing.T) {
 	t.Parallel()
-	eng := NewOpenAIEngine("http://localhost:1", "m", "sys", 5*time.Second, retry.Config{MaxAttempts: 1, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond}, slog.Default())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	eng := NewOpenAIEngine(srv.URL, "m", "sys", 5*time.Second, retry.Config{MaxAttempts: 1, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond}, slog.Default())
 	_, err := eng.Send(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil)
 	if err == nil {
 		t.Error("expected error for network failure")

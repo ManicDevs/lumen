@@ -65,7 +65,12 @@ func TestSendOllama_SilentStream_TimesOutButPreservesPartial(t *testing.T) {
 
 func TestSendOllama_NoContentBeforeFailure_ReturnsNoPartial(t *testing.T) {
 	t.Parallel()
-	eng := NewLocalEngine("http://127.0.0.1:1", "test-model", "sys", 8192, 200*time.Millisecond, retry.Config{}, slog.Default())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	eng := NewLocalEngine(srv.URL, "test-model", "sys", 8192, 200*time.Millisecond, retry.Config{}, slog.Default())
 
 	reply, err := eng.Send(context.Background(), []ChatMessage{{Role: "user", Content: "hi"}}, nil)
 	if err == nil {

@@ -412,12 +412,20 @@ func TestRun_ConfigInvalidHost2(t *testing.T) {
 	}
 }
 
+func mockErrorOllama() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+}
+
 func TestRun_EasterEggError2(t *testing.T) {
+	srv := mockErrorOllama()
+	defer srv.Close()
 	dir := t.TempDir()
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
 	defer os.Chdir(orig)
-	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+	t.Setenv("OLLAMA_HOST", srv.URL)
 
 	code := Run([]string{"--easter-egg"})
 	if code != 0 {
@@ -426,11 +434,13 @@ func TestRun_EasterEggError2(t *testing.T) {
 }
 
 func TestRun_TrainAllError2(t *testing.T) {
+	srv := mockErrorOllama()
+	defer srv.Close()
 	dir := t.TempDir()
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
 	defer os.Chdir(orig)
-	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+	t.Setenv("OLLAMA_HOST", srv.URL)
 
 	code := Run([]string{"--train-all"})
 	if code != 0 {

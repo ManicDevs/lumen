@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -244,7 +246,13 @@ func TestRunDatasetInit(t *testing.T) {
 
 func TestRunEasterEgg(t *testing.T) {
 	t.Parallel()
-	code := runEasterEgg("http://localhost:1", Flags{CustomTopic: "test"})
+	// Use a mock server that returns error to simulate connection failure
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	code := runEasterEgg(srv.URL, Flags{CustomTopic: "test"})
 	// RunGenerate with pipe=false gracefully returns 0 even on connection failure
 	_ = code
 }
@@ -256,7 +264,12 @@ func TestRunTrain_NoCommits(t *testing.T) {
 	os.Chdir(dir)
 	defer os.Chdir(orig)
 
-	code := runTrain("http://localhost:1", "test-model", false)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	code := runTrain(srv.URL, "test-model", false)
 	if code != 0 {
 		t.Errorf("runTrain with no commits should return 0, got %d", code)
 	}
@@ -269,7 +282,12 @@ func TestRunAuto(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	eng := llm.NewLocalEngine("http://localhost:1", "test-model", "sys", 8192, 100, retryConfig(), slog.Default())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "connection refused", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	eng := llm.NewLocalEngine(srv.URL, "test-model", "sys", 8192, 100, retryConfig(), slog.Default())
 	sendMsg := func(ctx context.Context, history []llm.ChatMessage, onToken llm.StreamFunc) (string, string, error) {
 		return "", "", context.DeadlineExceeded
 	}

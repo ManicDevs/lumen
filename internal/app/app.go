@@ -229,7 +229,7 @@ func makeExchange(hist *session.History, sendMessage func(context.Context, []llm
 
 // runEasterEgg starts the self-play dataset generation loop (--easter-egg).
 func runEasterEgg(host string, flags Flags) int {
-	if err := dataset.RunGenerate(host, config.DefaultOllamaModel, flags.Continuous, flags.PipeDataset, flags.CustomTopic); err != nil {
+	if err := dataset.RunGenerate(config.DefaultOllamaModel, host, flags.Continuous, flags.PipeDataset, flags.CustomTopic); err != nil {
 		fmt.Fprintf(os.Stderr, "Easter egg failed: %v\n", err)
 		return 1
 	}
