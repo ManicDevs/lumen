@@ -5,3 +5,5 @@
 cover.out
 *.test
 *.out
+*.prof
+*.trace

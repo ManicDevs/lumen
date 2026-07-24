@@ -4,6 +4,7 @@
 .git
 bin/
 build/
+dist/
 data/
 .env
 *.md
@@ -16,3 +17,5 @@ cover.out
 Makefile
 ANALYSIS.md
 CONTRIBUTING.md
+SECURITY.md
+LICENSE

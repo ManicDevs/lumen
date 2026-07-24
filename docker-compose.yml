@@ -1,0 +1,45 @@
+services:
+  lumen:
+    build: .
+    container_name: lumen
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=gemma3:1b
+      - OLLAMA_NUM_CTX=4096
+      - LOG_FORMAT=json
+      - LOG_LEVEL=info
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    networks:
+      - lumen
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - lumen
+
+volumes:
+  ollama_data:
+    driver: local
+
+networks:
+  lumen:
+    driver: bridge

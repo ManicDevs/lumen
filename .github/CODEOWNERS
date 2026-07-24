@@ -1,0 +1,20 @@
+# Lumen — Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default: all files require review from repo owners
+* @ManicDevs
+
+# CI/CD and infrastructure
+.github/ @ManicDevs
+Dockerfile @ManicDevs
+Makefile @ManicDevs
+.golangci.yml @ManicDevs
+
+# Core packages — require maintainers
+internal/ollama/ @ManicDevs
+internal/llm/ @ManicDevs
+internal/agent/ @ManicDevs
+internal/app/ @ManicDevs
+
+# Documentation — single approval
+*.md @ManicDevs
