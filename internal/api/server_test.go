@@ -217,7 +217,7 @@ func TestHandleUIRoot(t *testing.T) {
 	s := newTestServer(t)
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
-	s.handleUIRoot(w, req)
+	s.server.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusSeeOther {
 		t.Errorf("expected 303, got %d", w.Code)
 	}
@@ -245,5 +245,123 @@ func TestScoreResponse(t *testing.T) {
 				t.Errorf("score %f < expected min %f", score, tt.minScore)
 			}
 		})
+	}
+}
+
+func TestAPIErrorReturnsJSON(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t)
+
+	tests := []struct {
+		name            string
+		method          string
+		path            string
+		body            string
+		wantCode        int
+		wantErrContains string
+	}{
+		{"eval empty body", "POST", "/api/models/eval", "", 400, "empty request body"},
+		{"eval missing fields", "POST", "/api/models/eval", "{}", 400, "model and base_model required"},
+		{"eval bad json", "POST", "/api/models/eval", "{bad", 400, "invalid character"},
+		{"render empty body", "POST", "/api/prompts/render", "", 400, "empty request body"},
+		{"train-lora missing fields", "POST", "/api/models/train-lora", "{}", 400, "adapter_path and model_name required"},
+		{"git commit empty body", "POST", "/api/git/commit", "", 400, "empty request body"},
+		{"batch empty jobs", "POST", "/api/datasets/batch", `{"jobs":[]}`, 400, "jobs array is required"},
+		{"batch bad json", "POST", "/api/datasets/batch", "not json", 400, "invalid character"},
+		{"create version empty", "POST", "/api/dataset/versions", "{}", 400, "tag is required"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var body *strings.Reader
+			if tt.body == "" {
+				body = strings.NewReader("")
+			} else {
+				body = strings.NewReader(tt.body)
+			}
+			req := httptest.NewRequest(tt.method, tt.path, body)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			s.server.Handler.ServeHTTP(w, req)
+
+			if w.Code != tt.wantCode {
+				t.Errorf("status: got %d, want %d", w.Code, tt.wantCode)
+			}
+
+			var resp map[string]any
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatalf("response is not JSON: %v (body: %q)", err, w.Body.String())
+			}
+			if resp["error"] == nil {
+				t.Error("response missing 'error' key")
+			}
+			if tt.wantErrContains != "" {
+				errMsg, _ := resp["error"].(string)
+				if !strings.Contains(errMsg, tt.wantErrContains) {
+					t.Errorf("error %q does not contain %q", errMsg, tt.wantErrContains)
+				}
+			}
+		})
+	}
+}
+
+func TestAPINotFoundReturnsJSON(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/api/nonexistent", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("response is not JSON: %v", err)
+	}
+	if resp["error"] == nil {
+		t.Error("response missing 'error' key")
+	}
+}
+
+func TestAPIMethodNotAllowedReturnsJSON(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/api/git/commit", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+
+	// Go's ServeMux returns 404 for method mismatches, not 405.
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("response is not JSON: %v", err)
+	}
+	if resp["error"] == nil {
+		t.Error("response missing 'error' key")
+	}
+}
+
+func TestGitCommitRequiresMessage(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t)
+	body := strings.NewReader(`{"message":""}`)
+	req := httptest.NewRequest("POST", "/api/git/commit", body)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.handleGitCommit(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["error"] == nil {
+		t.Error("response missing error key")
 	}
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -94,7 +96,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *Server {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("internal/api/static"))))
 
 	// UI routes
-	mux.HandleFunc("GET /", s.handleUIRoot)
 	mux.HandleFunc("GET /datasets", s.handleUIDatasets)
 	mux.HandleFunc("GET /generate", s.handleUIGenerate)
 	mux.HandleFunc("GET /models", s.handleUIModels)
@@ -120,6 +121,19 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *Server {
 	// Batch routes
 	mux.HandleFunc("POST /api/datasets/batch", s.handleBatchGenerate)
 	mux.HandleFunc("POST /api/models/eval/batch", s.handleBatchEval)
+
+	// Catch-all for unmatched /api/ routes — return JSON errors, not HTML redirects.
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSONError(w, "not found", http.StatusNotFound)
+	})
+	// Catch-all for unmatched UI routes — return JSON errors for non-existent paths.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/datasets", http.StatusSeeOther)
+	})
 
 	handler := s.withCORS(mux)
 	handler = s.withSecurityHeaders(handler)
@@ -170,6 +184,26 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// writeJSONError sends a JSON error response with the given status code.
+func writeJSONError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]any{"error": msg, "code": code})
+}
+
+// decodeBody decodes a JSON request body into dst. Returns an error if the
+// body is empty or contains invalid JSON, using JSON-formatted error responses.
+func decodeBody(r *http.Request, dst any) error {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	if len(body) == 0 {
+		return errors.New("empty request body")
+	}
+	return json.Unmarshal(body, dst)
 }
 
 func (s *Server) withLogging(next http.Handler) http.Handler {
@@ -390,8 +424,8 @@ type GenerateRequest struct {
 
 func (s *Server) handleGenerateDataset(w http.ResponseWriter, r *http.Request) {
 	var req GenerateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.Model == "" {
@@ -414,7 +448,7 @@ func (s *Server) handleGenerateDataset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := dataset.RunGenerate(opts); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "completed"})
@@ -427,16 +461,16 @@ type ExportRequest struct {
 
 func (s *Server) handleExportDataset(w http.ResponseWriter, r *http.Request) {
 	var req ExportRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.Format == "" || req.Path == "" {
-		http.Error(w, "format and path required", http.StatusBadRequest)
+		writeJSONError(w, "format and path required", http.StatusBadRequest)
 		return
 	}
 	if err := dataset.ExportDataset(req.Format, req.Path); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "exported", "path": req.Path})
@@ -449,10 +483,10 @@ type CurateRequest struct {
 
 func (s *Server) handleCurateDataset(w http.ResponseWriter, r *http.Request) {
 	var req CurateRequest
-	json.NewDecoder(r.Body).Decode(&req)
+	decodeBody(r, &req)
 	removed, kept, err := dataset.CurateDataset(req.MinLength, req.MaxLength, 0.85)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]int{"removed": removed, "kept": kept})
@@ -464,7 +498,7 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	resp, err := client.List(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(resp)
@@ -477,15 +511,15 @@ type TrainRequest struct {
 
 func (s *Server) handleTrainModel(w http.ResponseWriter, r *http.Request) {
 	var req TrainRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.BaseModel == "" {
 		req.BaseModel = s.cfg.OllamaModel
 	}
 	if err := dataset.RunTrain(s.cfg.OllamaHost, req.BaseModel, req.UseAll); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "trained", "model": "lumen-tuned"})
@@ -499,12 +533,12 @@ type TrainLoRARequest struct {
 
 func (s *Server) handleTrainLoRA(w http.ResponseWriter, r *http.Request) {
 	var req TrainLoRARequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.AdapterPath == "" || req.ModelName == "" {
-		http.Error(w, "adapter_path and model_name required", http.StatusBadRequest)
+		writeJSONError(w, "adapter_path and model_name required", http.StatusBadRequest)
 		return
 	}
 	if req.BaseModel == "" {
@@ -516,7 +550,7 @@ func (s *Server) handleTrainLoRA(w http.ResponseWriter, r *http.Request) {
 
 	digest, err := client.CreateBlob(ctx, req.AdapterPath)
 	if err != nil {
-		http.Error(w, "upload adapter: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "upload adapter: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -526,7 +560,7 @@ func (s *Server) handleTrainLoRA(w http.ResponseWriter, r *http.Request) {
 		Adapters: map[string]string{"adapter": digest},
 	}
 	if err := client.Create(ctx, createReq); err != nil {
-		http.Error(w, "create model: "+err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, "create model: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "created", "model": req.ModelName, "adapter_digest": digest})
@@ -562,12 +596,12 @@ var evalMu sync.RWMutex
 
 func (s *Server) handleEvalModel(w http.ResponseWriter, r *http.Request) {
 	var req EvalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.Model == "" || req.BaseModel == "" {
-		http.Error(w, "model and base_model required", http.StatusBadRequest)
+		writeJSONError(w, "model and base_model required", http.StatusBadRequest)
 		return
 	}
 	if len(req.Prompts) == 0 {
@@ -643,7 +677,7 @@ func (s *Server) handleEvalResult(w http.ResponseWriter, r *http.Request) {
 	result, ok := evalStore[id]
 	evalMu.RUnlock()
 	if !ok {
-		http.Error(w, "not found", http.StatusNotFound)
+		writeJSONError(w, "eval not found", http.StatusNotFound)
 		return
 	}
 	json.NewEncoder(w).Encode(result)
@@ -656,7 +690,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		writeJSONError(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 
@@ -744,13 +778,13 @@ type RenderRequest struct {
 
 func (s *Server) handleRenderPrompt(w http.ResponseWriter, r *http.Request) {
 	var req RenderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	t, ok := prompt.Get(req.Template)
 	if !ok {
-		http.Error(w, "unknown template: "+req.Template, http.StatusBadRequest)
+		writeJSONError(w, "unknown template: "+req.Template, http.StatusBadRequest)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"rendered": t.Render(req.Code)})
@@ -762,13 +796,17 @@ type GitCommitRequest struct {
 
 func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request) {
 	var req GitCommitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Message == "" {
+		writeJSONError(w, "message is required", http.StatusBadRequest)
 		return
 	}
 	sha, err := git.CommitDataset(r.Context(), dataset.DatasetRoot, req.Message)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, fmt.Sprintf("git commit failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "committed", "sha": sha})
@@ -777,7 +815,7 @@ func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 	status, err := git.GetStatus(r.Context(), dataset.DatasetRoot)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]int{
@@ -785,10 +823,6 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 		"modified":  status.Modified,
 		"untracked": status.Untracked,
 	})
-}
-
-func (s *Server) handleUIRoot(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/datasets", http.StatusSeeOther)
 }
 
 func (s *Server) handleUIDatasets(w http.ResponseWriter, r *http.Request) {
@@ -1018,7 +1052,7 @@ func (s *Server) renderTemplate(w http.ResponseWriter, name string, data any) {
 func (s *Server) handleListVersions(w http.ResponseWriter, r *http.Request) {
 	versions, err := dataset.ListVersions(dataset.DatasetRoot)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]any{
@@ -1034,12 +1068,12 @@ type createVersionRequest struct {
 
 func (s *Server) handleCreateVersion(w http.ResponseWriter, r *http.Request) {
 	var req createVersionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.Tag == "" {
-		http.Error(w, "tag is required", http.StatusBadRequest)
+		writeJSONError(w, "tag is required", http.StatusBadRequest)
 		return
 	}
 	if !strings.HasPrefix(req.Tag, "v") {
@@ -1047,7 +1081,7 @@ func (s *Server) handleCreateVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := dataset.CreateVersion(dataset.DatasetRoot, req.Tag, req.Message)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(v)
@@ -1056,11 +1090,11 @@ func (s *Server) handleCreateVersion(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRollbackVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "version id is required", http.StatusBadRequest)
+		writeJSONError(w, "version id is required", http.StatusBadRequest)
 		return
 	}
 	if err := dataset.RollbackTo(dataset.DatasetRoot, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]string{"status": "rolled_back", "version": id})
@@ -1070,12 +1104,12 @@ func (s *Server) handleDiffVersions(w http.ResponseWriter, r *http.Request) {
 	from := r.PathValue("from")
 	to := r.PathValue("to")
 	if from == "" || to == "" {
-		http.Error(w, "from and to version ids are required", http.StatusBadRequest)
+		writeJSONError(w, "from and to version ids are required", http.StatusBadRequest)
 		return
 	}
 	diff, err := dataset.DiffVersions(dataset.DatasetRoot, from, to)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	json.NewEncoder(w).Encode(diff)
@@ -1097,12 +1131,12 @@ type BatchJobResult struct {
 // handleBatchGenerate processes multiple generation jobs concurrently.
 func (s *Server) handleBatchGenerate(w http.ResponseWriter, r *http.Request) {
 	var req BatchGenerateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if len(req.Jobs) == 0 {
-		http.Error(w, "jobs array is required", http.StatusBadRequest)
+		writeJSONError(w, "jobs array is required", http.StatusBadRequest)
 		return
 	}
 	if req.Parallel <= 0 {
@@ -1180,12 +1214,12 @@ type BatchEvalResult struct {
 // handleBatchEval runs multiple evaluation rounds concurrently.
 func (s *Server) handleBatchEval(w http.ResponseWriter, r *http.Request) {
 	var req BatchEvalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.ModelA == "" || req.ModelB == "" {
-		http.Error(w, "model_a and model_b required", http.StatusBadRequest)
+		writeJSONError(w, "model_a and model_b required", http.StatusBadRequest)
 		return
 	}
 	if len(req.PromptSets) == 0 {
