@@ -25,6 +25,7 @@ const (
 	createEndpoint   = "/api/create"
 	embedEndpoint    = "/api/embed"
 	psEndpoint       = "/api/ps"
+	blobsEndpoint    = "/api/blobs"
 )
 
 // Client is an HTTP client for the Ollama REST API. Create one with

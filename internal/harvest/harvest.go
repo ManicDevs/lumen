@@ -31,8 +31,13 @@ func commentRegexesFor(prefix string) (*regexp.Regexp, *regexp.Regexp) {
 	return full, trailing
 }
 
+// MaxFileSize is the maximum number of bytes a single source file may contain
+// before MinifyCode refuses to process it (16 MiB).
 const MaxFileSize = 16 * 1024 * 1024
 
+// MinifyCode reads the file at path, strips full-line and trailing comments
+// as well as blank lines, and returns the minified source. Files exceeding
+// MaxFileSize are rejected.
 func MinifyCode(path string) (string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -69,6 +74,9 @@ func MinifyCode(path string) (string, error) {
 	return out.String(), nil
 }
 
+// ValidateTargetPath resolves symlinks and checks that path exists and is
+// either a regular file or a directory. Returns an error for dangling
+// symlinks, inaccessible paths, or unsupported file types.
 func ValidateTargetPath(path string) error {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -84,6 +92,10 @@ func ValidateTargetPath(path string) error {
 	return nil
 }
 
+// Context returns a minified source-code context string for targetPath.
+// If targetPath is a file, only that file is returned. If it is a directory,
+// all recognized source files (sorted alphabetically) are walked and
+// concatenated. Test files and known build/dependency directories are skipped.
 func Context(targetPath string) (string, error) {
 	if err := ValidateTargetPath(targetPath); err != nil {
 		return "", err

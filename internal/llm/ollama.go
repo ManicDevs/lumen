@@ -12,6 +12,8 @@ import (
 	"gitlab.torproject.org/cerberus-droid/lumen/internal/retry"
 )
 
+// LocalEngine is an Engine implementation that communicates with a local
+// Ollama server over its REST API.
 type LocalEngine struct {
 	client       *ollama.Client
 	model        string
@@ -22,6 +24,7 @@ type LocalEngine struct {
 	retryCfg     retry.Config
 }
 
+// NewLocalEngine creates an Engine backed by an Ollama server at host.
 func NewLocalEngine(host, model, systemPrompt string, numCtx int, idleTimeout time.Duration, retryCfg retry.Config, logger *slog.Logger) *LocalEngine {
 	if numCtx <= 0 {
 		numCtx = 8192
@@ -40,10 +43,13 @@ func NewLocalEngine(host, model, systemPrompt string, numCtx int, idleTimeout ti
 	}
 }
 
+// Name returns the human-readable backend identifier.
 func (l *LocalEngine) Name() string {
 	return "Ollama"
 }
 
+// Send submits the conversation history to Ollama and returns the assistant's
+// reply. If onToken is non-nil, it is called for each token as it streams in.
 func (l *LocalEngine) Send(ctx context.Context, history []ChatMessage, onToken StreamFunc) (string, error) {
 	msgs := []ollama.Message{{Role: "system", Content: l.systemPrompt}}
 	for _, m := range history {
@@ -105,7 +111,7 @@ func (l *LocalEngine) Send(ctx context.Context, history []ChatMessage, onToken S
 		select {
 		case <-done:
 			if chatErr != nil {
-				return fmt.Errorf("Ollama: %w", chatErr)
+				return fmt.Errorf("ollama: %w", chatErr)
 			}
 		case <-tick.C:
 			if watchdogCancel != nil {
@@ -113,7 +119,7 @@ func (l *LocalEngine) Send(ctx context.Context, history []ChatMessage, onToken S
 			}
 			<-done
 			if partial.Len() > 0 {
-				return fmt.Errorf("Ollama: stream went silent for over %s", l.idleTimeout)
+				return fmt.Errorf("ollama: stream went silent for over %s", l.idleTimeout)
 			}
 			return retry.Permanent(fmt.Errorf("Ollama: stream went silent for over %s", l.idleTimeout))
 		case <-ctx.Done():
@@ -121,7 +127,7 @@ func (l *LocalEngine) Send(ctx context.Context, history []ChatMessage, onToken S
 		}
 
 		if partial.Len() == 0 {
-			return errors.New("Ollama: empty response")
+			return errors.New("ollama: empty response")
 		}
 		return nil
 	})

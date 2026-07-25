@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,7 @@ const MinimumInterval = 50 * time.Millisecond
 // Client.Server() to obtain a Server linked to an existing Client.
 type Server struct {
 	client *Client
+	mu     sync.Mutex
 	cmd    *exec.Cmd
 }
 
@@ -125,38 +127,46 @@ func (s *Server) Start(ctx context.Context, opts ServerStartOptions) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("ollama: start server: %w", err)
 	}
+	s.mu.Lock()
 	s.cmd = cmd
+	s.mu.Unlock()
 	return s.WaitForReady(ctx)
 }
 
 // Cmd returns the underlying exec.Cmd for the running server, or nil.
 func (s *Server) Cmd() *exec.Cmd {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.cmd
 }
 
 // Stop sends SIGINT to the server subprocess, waits up to 5 seconds, then
 // sends SIGKILL if it has not exited. It is safe to call multiple times.
 func (s *Server) Stop() error {
-	if s.cmd == nil {
+	s.mu.Lock()
+	cmd := s.cmd
+	s.cmd = nil
+	s.mu.Unlock()
+
+	if cmd == nil {
 		return nil
 	}
-	if s.cmd.Process == nil {
+	if cmd.Process == nil {
 		return nil
 	}
-	if err := s.cmd.Process.Signal(os.Interrupt); err != nil {
-		s.cmd.Process.Kill()
+	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+		cmd.Process.Kill()
 	}
 	done := make(chan struct{})
 	go func() {
-		s.cmd.Wait()
+		cmd.Wait()
 		close(done)
 	}()
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		s.cmd.Process.Kill()
+		cmd.Process.Kill()
 	}
-	s.cmd = nil
 	return nil
 }
 
@@ -173,7 +183,7 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("ollama: read version body: %w", err)
 	}
 	var v struct {
 		Version string `json:"version"`
@@ -184,35 +194,33 @@ func (c *Client) Version(ctx context.Context) (string, error) {
 	return v.Version, nil
 }
 
-// BlobExists checks whether a blob with the given digest exists on the server.
 // BlobExists checks whether a blob with the given SHA256 digest exists.
 func (c *Client) BlobExists(ctx context.Context, digest string) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, c.baseURL+"/api/blobs/"+digest, nil)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("ollama: blob exists request: %w", err)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("ollama: blob exists: %w", err)
 	}
 	resp.Body.Close()
 	return resp.StatusCode == http.StatusOK, nil
 }
 
-// BlobCreate pushes a blob to the server.
 // BlobCreate uploads a blob to the server. The data is streamed from the
 // reader. digest must be the SHA256 hash in "sha256:..." format.
 func (c *Client) BlobCreate(ctx context.Context, digest string, data io.Reader) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/blobs/"+digest, data)
 	if err != nil {
-		return err
+		return fmt.Errorf("ollama: blob create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("ollama: blob create: %w", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
 		return fmt.Errorf("ollama: blob create: HTTP %d: %s", resp.StatusCode, string(body))

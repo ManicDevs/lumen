@@ -1,0 +1,32 @@
+{{define "content"}}
+<div class="tabs">
+    <a href="/datasets?format=html" class="tab">List Commits</a>
+    <a href="/datasets/generate?format=html" class="tab">Generate Data</a>
+    <a href="/datasets/export?format=html" class="tab">Export</a>
+    <a href="/datasets/curate?format=html" class="tab">Curate</a>
+</div>
+
+<div id="commits" class="tab-content active">
+    <h2>Dataset Commits</h2>
+    {{if .Commits}}
+    <table class="table">
+        <thead>
+            <tr><th>Commit ID</th><th>Timestamp</th><th>Model</th><th>Datapoints</th></tr>
+        </thead>
+        <tbody>
+            {{range .Commits}}
+            <tr>
+                <td><code>{{shortID .CommitID}}</code></td>
+                <td>{{.Timestamp}}</td>
+                <td>{{.Model}}</td>
+                <td>{{.Datapoints}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    <p>Total: {{.TotalCommits}} commits</p>
+    {{else}}
+    <p class="loading">No commits found. Generate some data first.</p>
+    {{end}}
+</div>
+{{end}}

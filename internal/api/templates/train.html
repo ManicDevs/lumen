@@ -1,0 +1,107 @@
+{{define "content"}}
+<h2>Training</h2>
+
+<div class="grid">
+    <div class="card">
+        <h3>Train from Dataset (Few-shot)</h3>
+        <p>Creates a model with training data baked in as conversation history.</p>
+        <form id="trainForm">
+            <div class="form-group">
+                <label>Base Model</label>
+                <select name="base_model">
+                    <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
+                    <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="use_all"> Use ALL commits (fresh + archived)
+                </label>
+            </div>
+            <button type="submit" class="btn">Train Model</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>LoRA Adapter Training</h3>
+        <p>Upload a .gguf LoRA adapter and create a new model with it.</p>
+        <form id="loraForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Adapter File (.gguf)</label>
+                <input type="file" name="adapter" accept=".gguf" required>
+            </div>
+            <div class="form-group">
+                <label>New Model Name</label>
+                <input type="text" name="model_name" placeholder="lumen-tuned-lora" required>
+            </div>
+            <div class="form-group">
+                <label>Base Model</label>
+                <select name="base_model">
+                    <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
+                    <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+                </select>
+            </div>
+            <button type="submit" class="btn">Create LoRA Model</button>
+        </form>
+    </div>
+</div>
+
+<div id="trainResult" class="card hidden"></div>
+
+<script>
+document.getElementById('trainForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Training...';
+    
+    try {
+        const res = await fetch('/api/models/train', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                base_model: form.base_model.value,
+                use_all: form.use_all.checked
+            })
+        });
+        const data = await res.json();
+        showResult(data);
+    } catch (err) {
+        showResult({error: err.message});
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Train Model';
+    }
+});
+
+document.getElementById('loraForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Uploading...';
+    
+    try {
+        const formData = new FormData(form);
+        const res = await fetch('/api/models/train-lora', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        showResult(data);
+    } catch (err) {
+        showResult({error: err.message});
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create LoRA Model';
+    }
+});
+
+function showResult(data) {
+    const div = document.getElementById('trainResult');
+    div.classList.remove('hidden');
+    div.innerHTML = '<h4>Result</h4><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+}
+</script>
+{{end}}

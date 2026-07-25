@@ -1,0 +1,67 @@
+{{define "content"}}
+<h2>Prompt Templates</h2>
+
+<div class="grid">
+    <div class="card">
+        <h3>Templates</h3>
+        <div class="dataset-list">
+            {{range .Templates}}
+            <div class="dataset-item">
+                <div class="dataset-info">
+                    <span class="dataset-id">{{.Name}}</span>
+                    <span class="dataset-meta">{{.Description}}</span>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Render Template</h3>
+        <form id="renderForm">
+            <div class="form-group">
+                <label>Template</label>
+                <select name="template" id="templateSelect">
+                    {{range .Templates}}
+                    <option value="{{.Name}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Code Input</label>
+                <textarea name="code" rows="10" placeholder="Paste source code here..." id="codeInput"></textarea>
+            </div>
+            <button type="submit" class="btn">Render</button>
+        </form>
+        <div id="renderResult" class="card hidden" style="margin-top: 1rem;">
+            <h4>Rendered</h4>
+            <pre id="renderOutput" style="white-space: pre-wrap; max-height: 400px; overflow-y: auto;"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('renderForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const template = form.template.value;
+    const code = form.code.value;
+    const resultDiv = document.getElementById('renderResult');
+    const output = document.getElementById('renderOutput');
+
+    try {
+        const res = await fetch('/api/prompts/render', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({template, code})
+        });
+        const data = await res.json();
+        output.textContent = data.rendered;
+        resultDiv.classList.remove('hidden');
+    } catch (err) {
+        output.textContent = 'Error: ' + err.message;
+        resultDiv.classList.remove('hidden');
+    }
+});
+</script>
+{{end}}

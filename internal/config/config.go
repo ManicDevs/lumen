@@ -3,6 +3,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -34,7 +35,27 @@ const (
 	DefaultMaxRetries     = 4
 	DefaultLogFormat      = "text"
 	DefaultLogLevel       = "info"
+	DefaultAPIPort        = "8080"
+
+	// Validation limits.
+	MaxMaxRetries     = 100
+	MinNumCtx         = 256
+	MaxNumCtx         = 131072
+	MaxRequestTimeout = time.Hour
 )
+
+// Profile constants for environment-based configuration presets.
+const (
+	ProfileDev     = "dev"
+	ProfileStaging = "staging"
+	ProfileProd    = "prod"
+)
+
+var profileDefaults = map[string]Config{
+	ProfileDev:     {LogLevel: "debug", LogFormat: "text", MaxRetries: 1},
+	ProfileStaging: {LogLevel: "info", LogFormat: "json", MaxRetries: 3},
+	ProfileProd:    {LogLevel: "warn", LogFormat: "json", MaxRetries: 5},
+}
 
 const SystemPrompt = "You are a senior software engineer reviewing source code for bugs. " +
 	"The full text of one or more source files has already been provided to you as " +
@@ -70,10 +91,16 @@ type Config struct {
 	LogFormat      string
 	LogLevel       string
 
+	// API Server
+	APIPort string
+
 	// Session
 	SessionDir   string
 	BackupDir    string
 	AuditLogPath string
+
+	// Profile is the active configuration profile (dev, staging, prod).
+	Profile string
 }
 
 // Load builds a Config, applying .env values for any key not already set
@@ -97,6 +124,7 @@ func Load(logger *slog.Logger) (Config, error) {
 		return fallback
 	}
 
+	// Start with hardcoded defaults.
 	cfg := Config{
 		// --- Local backends ---
 		OllamaHost:    get("OLLAMA_HOST", DefaultOllamaHost),
@@ -113,6 +141,26 @@ func Load(logger *slog.Logger) (Config, error) {
 		MaxRetries:     DefaultMaxRetries,
 		LogFormat:      get("LOG_FORMAT", DefaultLogFormat),
 		LogLevel:       get("LOG_LEVEL", DefaultLogLevel),
+
+		// --- API Server ---
+		APIPort: get("API_PORT", DefaultAPIPort),
+	}
+
+	// Apply profile defaults if LUMEN_PROFILE is set.
+	profileName := get("LUMEN_PROFILE", "")
+	if profileName != "" {
+		if defaults, ok := profileDefaults[profileName]; ok {
+			cfg.Profile = profileName
+			if cfg.LogLevel == DefaultLogLevel {
+				cfg.LogLevel = defaults.LogLevel
+			}
+			if cfg.LogFormat == DefaultLogFormat {
+				cfg.LogFormat = defaults.LogFormat
+			}
+			if cfg.MaxRetries == DefaultMaxRetries {
+				cfg.MaxRetries = defaults.MaxRetries
+			}
+		}
 	}
 
 	if v := get("REQUEST_TIMEOUT_SECONDS", ""); v != "" {
@@ -146,14 +194,14 @@ func Load(logger *slog.Logger) (Config, error) {
 }
 
 var (
-	errEmptyModel = fmt.Errorf("OLLAMA_MODEL must not be empty")
-	errEmptyHost  = fmt.Errorf("OLLAMA_HOST must not be empty")
-	errMaxRetries = fmt.Errorf("MAX_RETRIES must be >= 1 and <= 100")
-	errNumCtx     = fmt.Errorf("OLLAMA_NUM_CTX must be >= 256 and <= 131072")
-	errTimeout    = fmt.Errorf("REQUEST_TIMEOUT_SECONDS must be positive and <= 3600")
-	errInvalidURL = fmt.Errorf("OLLAMA_HOST must be a valid HTTP or HTTPS URL")
-	errLogFormat  = fmt.Errorf("LOG_FORMAT must be 'text' or 'json'")
-	errLogLevel   = fmt.Errorf("LOG_LEVEL must be one of: debug, info, warn, error")
+	errEmptyModel = errors.New("OLLAMA_MODEL must not be empty")
+	errEmptyHost  = errors.New("OLLAMA_HOST must not be empty")
+	errMaxRetries = errors.New("MAX_RETRIES must be >= 1 and <= 100")
+	errNumCtx     = errors.New("OLLAMA_NUM_CTX must be >= 256 and <= 131072")
+	errTimeout    = errors.New("REQUEST_TIMEOUT_SECONDS must be positive and <= 3600")
+	errInvalidURL = errors.New("OLLAMA_HOST must be a valid HTTP or HTTPS URL")
+	errLogFormat  = errors.New("LOG_FORMAT must be 'text' or 'json'")
+	errLogLevel   = errors.New("LOG_LEVEL must be one of: debug, info, warn, error")
 )
 
 func validateHost(host string) error {
@@ -187,6 +235,7 @@ func validateLogFormat(format string) error {
 	}
 }
 
+// Validate checks that all configuration fields are within acceptable bounds.
 func (c Config) Validate() error {
 	if c.OllamaModel == "" {
 		return errEmptyModel
@@ -194,13 +243,13 @@ func (c Config) Validate() error {
 	if err := validateHost(c.OllamaHost); err != nil {
 		return err
 	}
-	if c.MaxRetries < 1 || c.MaxRetries > 100 {
+	if c.MaxRetries < 1 || c.MaxRetries > MaxMaxRetries {
 		return errMaxRetries
 	}
-	if c.OllamaNumCtx < 256 || c.OllamaNumCtx > 131072 {
+	if c.OllamaNumCtx < MinNumCtx || c.OllamaNumCtx > MaxNumCtx {
 		return errNumCtx
 	}
-	if c.RequestTimeout <= 0 || c.RequestTimeout > time.Hour {
+	if c.RequestTimeout <= 0 || c.RequestTimeout > MaxRequestTimeout {
 		return errTimeout
 	}
 	if err := validateLogFormat(c.LogFormat); err != nil {

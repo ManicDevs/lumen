@@ -1,0 +1,52 @@
+{{define "content"}}
+<h2>Available Models</h2>
+
+<div id="modelsList" class="loading">Loading models...</div>
+
+<script>
+async function loadModels() {
+    try {
+        const res = await fetch('/api/models');
+        const data = await res.json();
+        const container = document.getElementById('modelsList');
+        if (!data.models || data.models.length === 0) {
+            container.innerHTML = '<p>No models found</p>';
+            return;
+        }
+        container.innerHTML = data.models.map(m => `
+            <div class="model-card">
+                <h3>${m.name}</h3>
+                <p><strong>Size:</strong> ${formatBytes(m.size)}</p>
+                <p><strong>Family:</strong> ${m.details.family || 'N/A'}</p>
+                <p><strong>Params:</strong> ${m.details.parameter_size || 'N/A'}</p>
+                <p><strong>Quant:</strong> ${m.details.quantization_level || 'N/A'}</p>
+                <p><strong>Modified:</strong> ${new Date(m.modified_at).toLocaleString()}</p>
+            </div>
+        `).join('');
+    } catch (err) {
+        document.getElementById('modelsList').innerHTML = '<p class="error">Error loading models: ' + err.message + '</p>';
+    }
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+loadModels();
+</script>
+
+<style>
+.model-card {
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    background: #fafafa;
+}
+.model-card h3 { margin-top: 0; color: #1a1a2e; }
+</style>
+{{end}}

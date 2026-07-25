@@ -1,0 +1,137 @@
+{{define "content"}}
+<h2>Model Evaluation</h2>
+
+<div class="grid">
+    <div class="card">
+        <h3>Run Evaluation</h3>
+        <form id="evalForm">
+            <div class="form-group">
+                <label>Model A (Tuned)</label>
+                <input type="text" name="model_a" placeholder="lumen-tuned" required>
+            </div>
+            <div class="form-group">
+                <label>Model B (Base)</label>
+                <input type="text" name="model_b" placeholder="qwen2.5-coder:3b" required>
+            </div>
+            <div class="form-group">
+                <label>Prompts (one per line)</label>
+                <textarea name="prompts" rows="5" placeholder="Find bugs in this Go code
+Identify SQL injection vulnerabilities
+Optimize this hot path for allocations"></textarea>
+            </div>
+            <button type="submit" class="btn">Run Evaluation</button>
+        </form>
+    </div>
+    
+    <div class="card">
+        <h3>Recent Evaluations</h3>
+        <div id="evalList">Loading...</div>
+    </div>
+</div>
+
+<div id="evalResult" class="card hidden">
+    <h3>Evaluation Results</h3>
+    <div id="evalComparison"></div>
+</div>
+
+<script>
+async function loadEvals() {
+    try {
+        const res = await fetch('/api/evals');
+        const data = await res.json();
+        const container = document.getElementById('evalList');
+        if (!data.evals || data.evals.length === 0) {
+            container.innerHTML = '<p>No evaluations yet</p>';
+            return;
+        }
+        container.innerHTML = data.evals.map(e => `
+            <div class="eval-summary" style="padding: 1rem; border: 1px solid #eee; margin: 0.5rem 0; border-radius: 4px;">
+                <strong>${e.id}</strong> - ${e.model_a} vs ${e.model_b} - <span class="status ${e.status}">${e.status}</span>
+                <button class="btn secondary" style="margin-top: 0.5rem;" onclick="loadEvalDetail('${e.id}')">View</button>
+            </div>
+        `).join('');
+    } catch (err) {
+        document.getElementById('evalList').innerHTML = '<p class="error">Error: ' + err.message + '</p>';
+    }
+}
+
+async function loadEvalDetail(id) {
+    try {
+        const res = await fetch('/api/evals/' + id);
+        const e = await res.json();
+        const container = document.getElementById('evalResult');
+        container.classList.remove('hidden');
+        
+        let html = `
+            <h4>${e.id}</h4>
+            <p><strong>Model A:</strong> ${e.model_a} | <strong>Model B:</strong> ${e.model_b}</p>
+            <p><strong>Status:</strong> <span class="status ${e.status}">${e.status}</span></p>
+        `;
+        
+        if (e.results && e.results.length > 0) {
+            html += '<div class="eval-comparison">';
+            e.results.forEach(r => {
+                html += `
+                    <div>
+                        <h5>${r.prompt.substring(0, 60)}...</h5>
+                        <div class="eval-comparison">
+                            <div class="eval-model">
+                                <h6>${e.model_a} (Score: ${r.score_a.toFixed(2)})</h6>
+                                <div class="eval-response">${escapeHtml(r.response_a)}</div>
+                            </div>
+                            <div class="eval-model">
+                                <h6>${e.model_b} (Score: ${r.score_b.toFixed(2)})</h6>
+                                <div class="eval-response">${escapeHtml(r.response_b)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
+        
+        container.innerHTML = html;
+        container.scrollIntoView({behavior: 'smooth'});
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+document.getElementById('evalForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+    
+    try {
+        const res = await fetch('/api/models/eval', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                model_a: form.model_a.value,
+                model_b: form.model_b.value,
+                prompts: form.prompts.value.split('\n').filter(p => p.trim())
+            })
+        });
+        const data = await res.json();
+        alert('Evaluation started: ' + data.eval_id);
+        setTimeout(loadEvals, 2000);
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Run Evaluation';
+    }
+});
+
+loadEvals();
+setInterval(loadEvals, 5000);
+</script>
+{{end}}

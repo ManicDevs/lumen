@@ -19,8 +19,8 @@ func detectTTY() bool {
 	return info.Mode()&os.ModeCharDevice != 0
 }
 
-// TTY reports whether stdout is a terminal. Used by Spinner to decide
-// whether to show animated output.
+// TTY reports whether stdout is a terminal. It is mutable to allow tests to
+// override the detection; production code should treat it as read-only.
 var TTY = isTTY
 
 const (
@@ -51,6 +51,8 @@ func Cyan(s string) string { return wrap(codeCyan, s) }
 // Red returns s wrapped in ANSI red escape codes.
 func Red(s string) string { return wrap(codeRed, s) }
 
+// Spinner is a terminal spinner that displays an animated label until Stop is
+// called. It is safe to call Stop from any goroutine.
 type Spinner struct {
 	stop chan struct{}
 	done chan struct{}

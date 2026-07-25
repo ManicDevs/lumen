@@ -151,9 +151,17 @@ type PushRequest struct {
 
 // CreateRequest is the request body for POST /api/create.
 type CreateRequest struct {
-	Model  string `json:"model"`
-	From   string `json:"from,omitempty"`
-	Stream bool   `json:"stream,omitempty"`
+	Model      string            `json:"model"`
+	From       string            `json:"from,omitempty"`
+	Stream     bool              `json:"stream,omitempty"`
+	Template   string            `json:"template,omitempty"`
+	License    []string          `json:"license,omitempty"`
+	System     string            `json:"system,omitempty"`
+	Parameters map[string]any    `json:"parameters,omitempty"`
+	Messages   []Message         `json:"messages,omitempty"`
+	Files      map[string]string `json:"files,omitempty"`
+	Adapters   map[string]string `json:"adapters,omitempty"`
+	Quantize   string            `json:"quantize,omitempty"`
 }
 
 // ShowRequest is the request body for POST /api/show.
@@ -202,4 +210,16 @@ type LoadedModel struct {
 	Size     int64  `json:"size"`
 	Digest   string `json:"digest"`
 	SizeVRAM int64  `json:"size_vram,omitempty"`
+}
+
+// BlobCreateRequest is the request body for POST /api/blobs/create.
+type BlobCreateRequest struct {
+	Digest string `json:"digest"`
+	Size   int64  `json:"size"`
+}
+
+// BlobCreateResponse is the response from POST /api/blobs/create.
+type BlobCreateResponse struct {
+	Digest string `json:"digest"`
+	Size   int64  `json:"size"`
 }

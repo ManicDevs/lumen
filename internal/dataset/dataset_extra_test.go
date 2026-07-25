@@ -17,7 +17,7 @@ func TestCreateOllamaModel_NonJSONResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := createOllamaModel(srv.URL, "test", "FROM base")
+	err := createOllamaModel(srv.URL, "test", "base-model", []Datapoint{{Prompt: "p", Response: "r"}})
 	if err != nil {
 		t.Errorf("expected nil error for non-JSON 200, got: %v", err)
 	}

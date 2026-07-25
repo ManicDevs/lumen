@@ -1,0 +1,128 @@
+{{define "content"}}
+<h2>Dataset Versions</h2>
+
+<div class="grid">
+    <div class="card" style="grid-column: 1 / -1;">
+        <h2>Version History</h2>
+        <div id="versionsList" class="loading">Loading versions...</div>
+    </div>
+
+    <div class="card">
+        <h2>Create Version</h2>
+        <form id="createVersionForm" class="form">
+            <div class="form-group">
+                <label>Tag Name</label>
+                <input type="text" name="tag" placeholder="v1.0.0" required>
+            </div>
+            <div class="form-group">
+                <label>Message</label>
+                <input type="text" name="message" placeholder="Release description">
+            </div>
+            <button type="submit" class="btn">Create Version</button>
+        </form>
+        <div id="createResult" class="hidden" style="margin-top: 1rem;"></div>
+    </div>
+
+    <div class="card">
+        <h2>Diff Versions</h2>
+        <form id="diffForm" class="form">
+            <div class="form-group">
+                <label>From Version ID</label>
+                <input type="text" name="from_id" placeholder="commit_abc123" required>
+            </div>
+            <div class="form-group">
+                <label>To Version ID</label>
+                <input type="text" name="to_id" placeholder="commit_def456" required>
+            </div>
+            <button type="submit" class="btn secondary">Compare</button>
+        </form>
+        <div id="diffResult" class="hidden" style="margin-top: 1rem;"></div>
+    </div>
+</div>
+
+<script>
+async function loadVersions() {
+    const el = document.getElementById('versionsList');
+    try {
+        const res = await fetch('/api/dataset/versions');
+        const data = await res.json();
+        if (!data.versions || data.versions.length === 0) {
+            el.innerHTML = '<p>No versions found. Create one above.</p>';
+            el.classList.remove('loading');
+            return;
+        }
+        let html = '<table class="table"><thead><tr><th>ID</th><th>Tag</th><th>Message</th><th>Datapoints</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+        for (const v of data.versions) {
+            html += '<tr>';
+            html += '<td><code>' + (v.id || '').substring(0, 16) + '...</code></td>';
+            html += '<td>' + (v.tag || '-') + '</td>';
+            html += '<td>' + (v.message || '-') + '</td>';
+            html += '<td>' + (v.datapoints || 0) + '</td>';
+            html += '<td>' + (v.created_at || '-') + '</td>';
+            html += '<td><button class="btn secondary" onclick="rollbackVersion(\'' + v.id + '\')">Rollback</button></td>';
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        el.innerHTML = html;
+    } catch (err) {
+        el.innerHTML = '<p class="status error">Error loading versions: ' + err.message + '</p>';
+    }
+    el.classList.remove('loading');
+}
+
+async function rollbackVersion(id) {
+    if (!confirm('Rollback to version ' + id + '?')) return;
+    try {
+        const res = await fetch('/api/dataset/versions/' + id + '/rollback', {method: 'POST'});
+        const data = await res.json();
+        alert(data.status === 'rolled_back' ? 'Rolled back successfully' : 'Error: ' + JSON.stringify(data));
+        loadVersions();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+document.getElementById('createVersionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/dataset/versions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({tag: form.tag.value, message: form.message.value})
+        });
+        const data = await res.json();
+        const el = document.getElementById('createResult');
+        el.classList.remove('hidden');
+        el.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        loadVersions();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('diffForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/dataset/versions/' + form.from_id.value + '/diff/' + form.to_id.value);
+        const data = await res.json();
+        const el = document.getElementById('diffResult');
+        el.classList.remove('hidden');
+        el.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+loadVersions();
+</script>
+{{end}}

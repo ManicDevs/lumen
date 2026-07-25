@@ -11,17 +11,23 @@ import (
 	"time"
 )
 
-// trainedModelName is the name of the custom model produced by RunTrain.
 const trainedModelName = "lumen-tuned"
 
-// maxTrainMessages limits the number of messages used when training from
-// fresh (unarchived) commits alone.
 const maxTrainMessages = 200
 
+type ollamaMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
 type ollamaCreateRequest struct {
-	Model     string `json:"model"`
-	Modelfile string `json:"modelfile"`
-	Stream    bool   `json:"stream"`
+	Model      string          `json:"model"`
+	From       string          `json:"from"`
+	System     string          `json:"system,omitempty"`
+	Template   string          `json:"template,omitempty"`
+	Parameters map[string]any  `json:"parameters,omitempty"`
+	Messages   []ollamaMessage `json:"messages,omitempty"`
+	Stream     bool            `json:"stream"`
 }
 
 type ollamaCreateStatus struct {
@@ -29,24 +35,20 @@ type ollamaCreateStatus struct {
 	Error  string `json:"error"`
 }
 
-func buildModelfile(baseModel string, messages []Datapoint) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "FROM %s\n", baseModel)
-	fmt.Fprintf(&b, "SYSTEM %s\n", quoteModelfileString(SystemPrompt))
+func createOllamaModel(host, name, baseModel string, messages []Datapoint) error {
+	var msgs []ollamaMessage
 	for _, m := range messages {
-		fmt.Fprintf(&b, "MESSAGE user %s\n", quoteModelfileString(m.Prompt))
-		fmt.Fprintf(&b, "MESSAGE assistant %s\n", quoteModelfileString(m.Response))
+		msgs = append(msgs, ollamaMessage{Role: "user", Content: m.Prompt})
+		msgs = append(msgs, ollamaMessage{Role: "assistant", Content: m.Response})
 	}
-	return b.String()
-}
 
-func quoteModelfileString(s string) string {
-	s = strings.ReplaceAll(s, `"""`, `\"\"\"`)
-	return `"""` + s + `"""`
-}
-
-func createOllamaModel(host, name, modelfile string) error {
-	payload, err := json.Marshal(ollamaCreateRequest{Model: name, Modelfile: modelfile, Stream: false})
+	payload, err := json.Marshal(ollamaCreateRequest{
+		Model:    name,
+		From:     baseModel,
+		System:   SystemPrompt,
+		Messages: msgs,
+		Stream:   false,
+	})
 	if err != nil {
 		return err
 	}
@@ -124,9 +126,7 @@ func RunTrain(host, baseModel string, useAll bool) error {
 		fmt.Printf("[Trainer] Building %s from %d fresh commit(s), %d frame(s)...\n", trainedModelName, len(freshPaths), len(messages))
 	}
 
-	modelfile := buildModelfile(baseModel, messages)
-
-	if err := createOllamaModel(host, trainedModelName, modelfile); err != nil {
+	if err := createOllamaModel(host, trainedModelName, baseModel, messages); err != nil {
 		return fmt.Errorf("trainer: creating model: %w", err)
 	}
 	fmt.Printf("[Trainer] Local model %q customized successfully.\n", trainedModelName)

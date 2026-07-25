@@ -1,0 +1,148 @@
+{{define "content"}}
+<h2>Generate Training Data</h2>
+
+<div class="tabs">
+    <div class="tab active" onclick="showTab('single')">Single Generate</div>
+    <div class="tab" onclick="showTab('batch')">Batch Generate</div>
+</div>
+
+<div id="tab-single" class="tab-content active">
+    <form id="generateForm" class="form">
+        <div class="form-group">
+            <label>Target Path (optional)</label>
+            <input type="text" name="target_path" placeholder="./internal/agent" help="Harvest code from this directory for context">
+        </div>
+        <div class="form-group">
+            <label>Topic (optional)</label>
+            <input type="text" name="topic" placeholder="Analyze this code for bugs and performance issues">
+        </div>
+        <div class="form-group">
+            <label>Model</label>
+            <select name="model">
+                <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
+                <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Mode</label>
+            <select name="continuous">
+                <option value="false">Single Pass</option>
+                <option value="true">Continuous (5 iterations)</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Generate & Commit</button>
+    </form>
+</div>
+
+<div id="tab-batch" class="tab-content">
+    <form id="batchForm" class="form">
+        <div class="form-group">
+            <label>Topics (one per line)</label>
+            <textarea name="topics" rows="8" placeholder="Find security vulnerabilities in this auth handler
+Optimize database queries for performance
+Review concurrent goroutine patterns
+Analyze error handling in API layer"></textarea>
+        </div>
+        <div class="form-group">
+            <label>Target Path (optional, shared across jobs)</label>
+            <input type="text" name="target_path" placeholder="./internal/agent">
+        </div>
+        <div class="form-group">
+            <label>Model</label>
+            <select name="model">
+                <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
+                <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Parallel Jobs (1-8)</label>
+            <input type="number" name="parallel" value="2" min="1" max="8">
+        </div>
+        <button type="submit" class="btn">Run Batch Generate</button>
+    </form>
+</div>
+
+<div id="result" class="hidden" style="margin-top: 2rem;"></div>
+
+<script>
+function showTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+}
+
+document.getElementById('generateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    
+    const data = {
+        target_path: form.target_path.value || '',
+        topic: form.topic.value || '',
+        model: form.model.value,
+        continuous: form.continuous.value === 'true',
+        pipe_dataset: true
+    };
+    
+    try {
+        const res = await fetch('/api/datasets/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        const resultDiv = document.getElementById('result');
+        resultDiv.classList.remove('hidden');
+        resultDiv.innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate & Commit';
+    }
+});
+
+document.getElementById('batchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Running batch...';
+    
+    const topics = form.topics.value.split('\n').filter(t => t.trim());
+    const jobs = topics.map(topic => ({
+        topic: topic.trim(),
+        target_path: form.target_path.value || '',
+        model: form.model.value,
+        continuous: false,
+        pipe_dataset: true,
+        max_iterations: 1
+    }));
+    
+    const data = {
+        jobs: jobs,
+        parallel: parseInt(form.parallel.value) || 2
+    };
+    
+    try {
+        const res = await fetch('/api/datasets/batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        const resultDiv = document.getElementById('result');
+        resultDiv.classList.remove('hidden');
+        resultDiv.innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Run Batch Generate';
+    }
+});
+</script>
+{{end}}

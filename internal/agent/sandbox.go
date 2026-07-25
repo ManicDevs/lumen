@@ -120,6 +120,27 @@ func shPath() string {
 	return "/bin/sh"
 }
 
+type limitWriter struct {
+	w   strings.Builder
+	n   int64
+	cap int64
+}
+
+func (l *limitWriter) Write(p []byte) (int, error) {
+	remaining := l.cap - l.n
+	if remaining <= 0 {
+		return len(p), nil
+	}
+	if int64(len(p)) > remaining {
+		p = p[:remaining]
+	}
+	n, err := l.w.Write(p)
+	l.n += int64(n)
+	return n, err
+}
+
+func (l *limitWriter) String() string { return l.w.String() }
+
 // runCommand executes cmdStr via the system shell. When sandbox is true the
 // environment is restricted and the command is checked against the denylist
 // before execution.
@@ -147,9 +168,12 @@ func runCommand(ctx context.Context, cmdStr, workDir string, sandbox bool) (stri
 	} else {
 		cmd.Env = os.Environ()
 	}
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(out), err
+	stdout := &limitWriter{cap: 1 << 20}
+	stderr := &limitWriter{cap: 1 << 20}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return stdout.String() + stderr.String(), err
 	}
-	return string(out), nil
+	return stdout.String() + stderr.String(), nil
 }

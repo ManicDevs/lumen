@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func dirExists(path string) bool {
@@ -21,6 +22,21 @@ func RunInit() error {
 
 	alreadyExists := dirExists(commitsDir) && dirExists(refsHeadsDir)
 
+	// Check if there are any actual commits
+	hasCommits := false
+	if dirExists(commitsDir) {
+		entries, err := os.ReadDir(commitsDir)
+		if err != nil {
+			return fmt.Errorf("dataset init: reading commits dir: %w", err)
+		}
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasPrefix(e.Name(), "commit_") && strings.HasSuffix(e.Name(), ".json") {
+				hasCommits = true
+				break
+			}
+		}
+	}
+
 	if err := os.MkdirAll(commitsDir, 0755); err != nil {
 		return fmt.Errorf("dataset init: creating commits dir: %w", err)
 	}
@@ -33,7 +49,9 @@ func RunInit() error {
 
 	keepPath := filepath.Join(stageDir, ".gitkeep")
 	if _, err := os.Stat(keepPath); os.IsNotExist(err) {
-		_ = os.WriteFile(keepPath, nil, 0644)
+		if err := os.WriteFile(keepPath, nil, 0644); err != nil {
+			return fmt.Errorf("dataset init: creating .gitkeep: %w", err)
+		}
 	}
 
 	absPath, err := filepath.Abs(DatasetRoot)
@@ -46,7 +64,23 @@ func RunInit() error {
 	} else {
 		fmt.Printf("Initialized empty dataset repository in %s\n", absPath)
 	}
-	fmt.Println("(no commits yet — run --easter-egg --pipe-dataset to record the first one)")
+
+	if hasCommits {
+		// Count commits
+		entries, err := os.ReadDir(commitsDir)
+		if err != nil {
+			return fmt.Errorf("dataset init: reading commits dir: %w", err)
+		}
+		count := 0
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasPrefix(e.Name(), "commit_") && strings.HasSuffix(e.Name(), ".json") {
+				count++
+			}
+		}
+		fmt.Printf("(%d commit(s) found)\n", count)
+	} else {
+		fmt.Println("(no commits yet — run --easter-egg --pipe-dataset to record the first one)")
+	}
 
 	return nil
 }

@@ -59,16 +59,20 @@ func NewOpenAIEngine(host, model, systemPrompt string, idleTimeout time.Duration
 		model:        model,
 		systemPrompt: systemPrompt,
 		idleTimeout:  idleTimeout,
-		httpClient:   &http.Client{},
+		httpClient:   &http.Client{Timeout: 5 * time.Minute},
 		logger:       logger,
 		retryCfg:     retryCfg,
 	}
 }
 
+// Name returns the human-readable backend identifier.
 func (l *OpenAIEngine) Name() string {
 	return "OpenAI-compat"
 }
 
+// Send submits the conversation history to the OpenAI-compatible server and
+// returns the assistant's reply. If onToken is non-nil, it is called for each
+// token as it streams in.
 func (l *OpenAIEngine) Send(ctx context.Context, history []ChatMessage, onToken StreamFunc) (string, error) {
 	msgs := []openAIMessage{{Role: "system", Content: l.systemPrompt}}
 	for _, m := range history {

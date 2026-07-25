@@ -252,7 +252,7 @@ func TestRunEasterEgg(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	code := runEasterEgg(srv.URL, Flags{CustomTopic: "test"})
+	code := runEasterEgg(srv.URL, Flags{CustomTopic: "test"}, slog.Default())
 	// RunGenerate with pipe=false gracefully returns 0 even on connection failure
 	_ = code
 }

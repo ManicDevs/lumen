@@ -10,72 +10,6 @@ import (
 	"testing"
 )
 
-func TestBuildModelfile(t *testing.T) {
-	t.Parallel()
-	msgs := []Datapoint{
-		{Prompt: "What is 2+2?", Response: "4"},
-		{Prompt: "What is 3+3?", Response: "6"},
-	}
-	result := buildModelfile("qwen2.5-coder:3b", msgs)
-
-	if !strings.HasPrefix(result, "FROM qwen2.5-coder:3b\n") {
-		t.Error("expected FROM line")
-	}
-	if !strings.Contains(result, "SYSTEM") {
-		t.Error("expected SYSTEM line")
-	}
-	if !strings.Contains(result, "MESSAGE user") {
-		t.Error("expected MESSAGE user lines")
-	}
-	if !strings.Contains(result, "MESSAGE assistant") {
-		t.Error("expected MESSAGE assistant lines")
-	}
-	if !strings.Contains(result, "What is 2+2?") {
-		t.Error("expected first prompt")
-	}
-	if !strings.Contains(result, "What is 3+3?") {
-		t.Error("expected second prompt")
-	}
-}
-
-func TestBuildModelfile_EmptyMessages(t *testing.T) {
-	t.Parallel()
-	result := buildModelfile("base", nil)
-	if !strings.HasPrefix(result, "FROM base\n") {
-		t.Error("expected FROM line even with no messages")
-	}
-	if strings.Contains(result, "MESSAGE") {
-		t.Error("should not contain MESSAGE lines when empty")
-	}
-}
-
-func TestQuoteModelfileString_Simple(t *testing.T) {
-	t.Parallel()
-	got := quoteModelfileString("hello")
-	if got != `"""hello"""` {
-		t.Errorf("quoteModelfileString = %q", got)
-	}
-}
-
-func TestQuoteModelfileString_WithTripleQuotes(t *testing.T) {
-	t.Parallel()
-	got := quoteModelfileString(`text with """ inside`)
-	if !strings.Contains(got, `\"\"\"`) {
-		t.Errorf("should escape triple quotes, got %q", got)
-	}
-	if !strings.HasPrefix(got, `"""`) || !strings.HasSuffix(got, `"""`) {
-		t.Errorf("should be wrapped in triple quotes, got %q", got)
-	}
-}
-
-func TestQuoteModelfileString_Empty(t *testing.T) {
-	t.Parallel()
-	got := quoteModelfileString("")
-	if got != `""""""` {
-		t.Errorf("empty string: got %q", got)
-	}
-}
-
 func TestDirExists(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -100,15 +34,31 @@ func TestCreateOllamaModel_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := createOllamaModel(srv.URL, "test-model", "FROM base")
+	messages := []Datapoint{
+		{Prompt: "What is 2+2?", Response: "4"},
+		{Prompt: "What is 3+3?", Response: "6"},
+	}
+	err := createOllamaModel(srv.URL, "test-model", "qwen2.5-coder:3b", messages)
 	if err != nil {
 		t.Fatalf("createOllamaModel: %v", err)
 	}
 	if received.Model != "test-model" {
 		t.Errorf("Model = %q", received.Model)
 	}
-	if received.Modelfile != "FROM base" {
-		t.Errorf("Modelfile = %q", received.Modelfile)
+	if received.From != "qwen2.5-coder:3b" {
+		t.Errorf("From = %q", received.From)
+	}
+	if received.System != SystemPrompt {
+		t.Errorf("System = %q", received.System)
+	}
+	if len(received.Messages) != 4 {
+		t.Errorf("expected 4 messages (2 user + 2 assistant), got %d", len(received.Messages))
+	}
+	if received.Messages[0].Role != "user" || received.Messages[0].Content != "What is 2+2?" {
+		t.Errorf("first message = %+v", received.Messages[0])
+	}
+	if received.Messages[1].Role != "assistant" || received.Messages[1].Content != "4" {
+		t.Errorf("second message = %+v", received.Messages[1])
 	}
 }
 
@@ -120,7 +70,7 @@ func TestCreateOllamaModel_Non200(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := createOllamaModel(srv.URL, "test", "FROM base")
+	err := createOllamaModel(srv.URL, "test", "base-model", []Datapoint{{Prompt: "p", Response: "r"}})
 	if err == nil {
 		t.Error("expected error for non-200 response")
 	}
@@ -134,7 +84,7 @@ func TestCreateOllamaModel_OllamaError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := createOllamaModel(srv.URL, "test", "FROM base")
+	err := createOllamaModel(srv.URL, "test", "base-model", []Datapoint{{Prompt: "p", Response: "r"}})
 	if err == nil {
 		t.Error("expected error for Ollama error response")
 	}
@@ -145,7 +95,7 @@ func TestCreateOllamaModel_OllamaError(t *testing.T) {
 
 func TestCreateOllamaModel_NetworkError(t *testing.T) {
 	t.Parallel()
-	err := createOllamaModel("http://localhost:1", "test", "FROM base")
+	err := createOllamaModel("http://localhost:1", "test", "base-model", []Datapoint{{Prompt: "p", Response: "r"}})
 	if err == nil {
 		t.Error("expected error for unreachable host")
 	}
@@ -323,7 +273,14 @@ func TestRunGenerate_SinglePass(t *testing.T) {
 	srv := mockOllamaServer(t, "This is a test response with ### heading")
 	defer srv.Close()
 
-	err := RunGenerate("test-model", srv.URL, false, false, "test topic")
+	err := RunGenerate(GenerateOptions{
+		Model:         "test-model",
+		Host:          srv.URL,
+		Continuous:    false,
+		PipeDataset:   false,
+		Topic:         "test topic",
+		MaxIterations: 1,
+	})
 	if err != nil {
 		t.Errorf("RunGenerate single pass: %v", err)
 	}
@@ -338,7 +295,14 @@ func TestRunGenerate_WithPipe(t *testing.T) {
 	srv := mockOllamaServer(t, "Response with ### structure")
 	defer srv.Close()
 
-	err := RunGenerate("test-model", srv.URL, false, true, "test topic")
+	err := RunGenerate(GenerateOptions{
+		Model:         "test-model",
+		Host:          srv.URL,
+		Continuous:    false,
+		PipeDataset:   true,
+		Topic:         "test topic",
+		MaxIterations: 1,
+	})
 	if err != nil {
 		t.Errorf("RunGenerate with pipe: %v", err)
 	}
@@ -360,7 +324,14 @@ func TestRunGenerate_EmptyTopic(t *testing.T) {
 	defer srv.Close()
 
 	// Empty topic should pick a random seed topic
-	err := RunGenerate("test-model", srv.URL, false, false, "")
+	err := RunGenerate(GenerateOptions{
+		Model:         "test-model",
+		Host:          srv.URL,
+		Continuous:    false,
+		PipeDataset:   false,
+		Topic:         "",
+		MaxIterations: 1,
+	})
 	if err != nil {
 		t.Errorf("RunGenerate empty topic: %v", err)
 	}
@@ -378,7 +349,14 @@ func TestRunGenerate_ConnectionFailure(t *testing.T) {
 	os.Chdir(dir)
 	defer os.Chdir(orig)
 
-	err := RunGenerate("test-model", srv.URL, false, false, "test")
+	err := RunGenerate(GenerateOptions{
+		Model:         "test-model",
+		Host:          srv.URL,
+		Continuous:    false,
+		PipeDataset:   false,
+		Topic:         "test",
+		MaxIterations: 1,
+	})
 	if err != nil {
 		t.Errorf("RunGenerate connection failure should return nil, got: %v", err)
 	}

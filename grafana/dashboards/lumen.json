@@ -1,0 +1,38 @@
+{
+  "id": null,
+  "uid": "lumen-overview",
+  "title": "Lumen Overview",
+  "tags": ["lumen"],
+  "timezone": "browser",
+  "refresh": "15s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Requests Total",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "http_requests_total", "refId": "A"}]
+    },
+    {
+      "id": 2,
+      "title": "Request Duration",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{"expr": "rate(http_request_duration_seconds_sum[1m])", "refId": "A"}]
+    },
+    {
+      "id": 3,
+      "title": "Error Rate",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "rate(http_requests_total{status=~\"5..\"}[1m])", "refId": "A"}]
+    },
+    {
+      "id": 4,
+      "title": "Active Models",
+      "type": "table",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
+      "targets": [{"expr": "ollama_model_info", "refId": "A"}]
+    }
+  ]
+}

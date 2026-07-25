@@ -1,0 +1,61 @@
+{{define "content"}}
+<h2>Git Status</h2>
+
+{{if .IsRepo}}
+<p>Dataset repository: <strong>initialized</strong></p>
+{{else}}
+<p>Dataset repository: <strong>not a git repo</strong></p>
+{{end}}
+
+<div class="grid">
+    <div class="card">
+        <h3>Working Tree</h3>
+        <table class="table">
+            <thead><tr><th>Status</th><th>Count</th></tr></thead>
+            <tbody>
+                <tr><td>Staged</td><td>{{.Staged}}</td></tr>
+                <tr><td>Modified</td><td>{{.Modified}}</td></tr>
+                <tr><td>Untracked</td><td>{{.Untracked}}</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h3>Commit Changes</h3>
+        <form id="commitForm">
+            <div class="form-group">
+                <label>Commit Message</label>
+                <textarea name="message" rows="3" placeholder="dataset: auto-commit at ..."></textarea>
+            </div>
+            <button type="submit" class="btn">Commit</button>
+        </form>
+        <div id="commitResult" class="status hidden" style="margin-top: 1rem;"></div>
+    </div>
+</div>
+
+<script>
+document.getElementById('commitForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const message = form.message.value || 'dataset: auto-commit';
+    const resultDiv = document.getElementById('commitResult');
+
+    try {
+        const res = await fetch('/api/git/commit', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message})
+        });
+        const data = await res.json();
+        resultDiv.classList.remove('hidden');
+        resultDiv.className = 'status success';
+        resultDiv.innerHTML = '<strong>Committed:</strong> ' + (data.sha || 'OK') + ' — ' + data.status;
+        setTimeout(function() { location.reload(); }, 2000);
+    } catch (err) {
+        resultDiv.classList.remove('hidden');
+        resultDiv.className = 'status error';
+        resultDiv.textContent = 'Error: ' + err.message;
+    }
+});
+</script>
+{{end}}

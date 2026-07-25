@@ -112,5 +112,5 @@ func Do(ctx context.Context, cfg Config, fn func(ctx context.Context, attempt in
 		}
 	}
 
-	return lastErr
+	return fmt.Errorf("retry: exhausted %d attempts: %w", cfg.MaxAttempts, lastErr)
 }
