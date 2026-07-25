@@ -1,0 +1,140 @@
+{{define "content"}}
+<div class="stat-grid" id="stats">
+  <div class="stat-card">
+    <div class="stat-icon brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+    </div>
+    <div class="stat-value" id="stat-commits">-</div>
+    <div class="stat-label">Dataset Commits</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon success">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    <div class="stat-value" id="stat-datapoints">-</div>
+    <div class="stat-label">Total Datapoints</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon info">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+    </div>
+    <div class="stat-value" id="stat-models">-</div>
+    <div class="stat-label">Ollama Models</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon warning">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+    </div>
+    <div class="stat-value" id="stat-requests">-</div>
+    <div class="stat-label">Total Requests</div>
+  </div>
+</div>
+
+<div class="grid-2 mb-8">
+  <div class="card">
+    <div class="card-header">
+      <h3>Recent Activity</h3>
+      <a href="/datasets" class="btn btn-ghost btn-sm">View All</a>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <div id="recent-activity" class="loading"><span class="spinner"></span> Loading...</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <h3>System Health</h3>
+      <span class="badge badge-success" id="health-badge">Checking...</span>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <table class="table" id="health-table">
+        <thead><tr><th>Subsystem</th><th>Status</th></tr></thead>
+        <tbody id="health-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="grid-3">
+  <a href="/generate" class="card" style="cursor:pointer;text-decoration:none;">
+    <div class="card-body" style="text-align:center;padding:2rem;">
+      <div style="font-size:2rem;margin-bottom:0.5rem;">&#x1f504;</div>
+      <h3 style="margin-bottom:0.25rem;">Generate Data</h3>
+      <p class="text-sm text-muted">Create training data from source code</p>
+    </div>
+  </a>
+  <a href="/eval" class="card" style="cursor:pointer;text-decoration:none;">
+    <div class="card-body" style="text-align:center;padding:2rem;">
+      <div style="font-size:2rem;margin-bottom:0.5rem;">&#x1f9ea;</div>
+      <h3 style="margin-bottom:0.25rem;">Evaluate Models</h3>
+      <p class="text-sm text-muted">Compare tuned vs base model performance</p>
+    </div>
+  </a>
+  <a href="/train" class="card" style="cursor:pointer;text-decoration:none;">
+    <div class="card-body" style="text-align:center;padding:2rem;">
+      <div style="font-size:2rem;margin-bottom:0.5rem;">&#x1f9e0;</div>
+      <h3 style="margin-bottom:0.25rem;">Train Model</h3>
+      <p class="text-sm text-muted">Fine-tune with curated datasets</p>
+    </div>
+  </a>
+</div>
+
+<script>
+(function() {
+  apiCall('GET', '/api/datasets').then(function(d) {
+    document.getElementById('stat-commits').textContent = d.total_commits || 0;
+  });
+  apiCall('GET', '/metrics').then(function(t) {
+    var lines = t.split('\n');
+    lines.forEach(function(l) {
+      if (l.indexOf('lumen_dataset_datapoints_total') === 0) {
+        document.getElementById('stat-datapoints').textContent = l.split(' ')[1] || '0';
+      }
+      if (l.indexOf('lumen_http_requests_total') === 0 && l[0] === 'l') {
+        document.getElementById('stat-requests').textContent = l.split(' ')[1] || '0';
+      }
+    });
+  });
+  apiCall('GET', '/api/models').then(function(m) {
+    var count = (m.models && m.models.length) || 0;
+    document.getElementById('stat-models').textContent = count;
+  });
+  apiCall('GET', '/health').then(function(h) {
+    var badge = document.getElementById('health-badge');
+    if (h.status === 'ok') {
+      badge.className = 'badge badge-success';
+      badge.textContent = 'All Systems Operational';
+    } else {
+      badge.className = 'badge badge-warning';
+      badge.textContent = 'Degraded';
+    }
+    var body = document.getElementById('health-body');
+    body.innerHTML = '';
+    var icons = {ok:'&#x2714;', down:'&#x2718;'};
+    Object.keys(h.subsystems || {}).forEach(function(k) {
+      var s = h.subsystems[k];
+      var cls = s === 'ok' ? 'badge-success' : 'badge-error';
+      body.innerHTML += '<tr><td class="text-sm font-semibold">' + esc(k) + '</td><td><span class="badge ' + cls + '">' + s + '</span></td></tr>';
+    });
+  }).catch(function() {
+    document.getElementById('health-badge').className = 'badge badge-error';
+    document.getElementById('health-badge').textContent = 'Unreachable';
+  });
+  apiCall('GET', '/api/datasets').then(function(d) {
+    var el = document.getElementById('recent-activity');
+    if (!d.commits || d.commits.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:2rem;"><p class="text-muted text-sm">No commits yet. Generate a dataset to get started.</p></div>';
+      return;
+    }
+    var html = '<table class="table"><thead><tr><th>ID</th><th>Model</th><th>Datapoints</th></tr></thead><tbody>';
+    var recent = d.commits.slice(-5).reverse();
+    recent.forEach(function(c) {
+      html += '<tr><td class="cell-mono text-sm">' + esc((c.commit_id || c.CommitID || '').substring(0,12)) + '</td>';
+      html += '<td class="text-sm">' + esc(c.model || c.Model || '') + '</td>';
+      html += '<td class="text-sm">' + (c.datapoints || c.Datapoints || 0) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  });
+})();
+</script>
+{{end}}

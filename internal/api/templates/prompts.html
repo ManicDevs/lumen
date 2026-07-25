@@ -1,67 +1,86 @@
 {{define "content"}}
-<h2>Prompt Templates</h2>
+<p class="text-sm text-secondary mb-6">Manage and render prompt templates for code review and analysis tasks.</p>
 
-<div class="grid">
-    <div class="card">
-        <h3>Templates</h3>
-        <div class="dataset-list">
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><h3>Available Templates</h3></div>
+    <div class="card-body" style="padding:0;">
+      {{if .Templates}}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Name</th><th>Description</th></tr>
+          </thead>
+          <tbody>
             {{range .Templates}}
-            <div class="dataset-item">
-                <div class="dataset-info">
-                    <span class="dataset-id">{{.Name}}</span>
-                    <span class="dataset-meta">{{.Description}}</span>
-                </div>
-            </div>
+            <tr>
+              <td><span class="badge badge-brand font-mono">{{.Name}}</span></td>
+              <td class="text-sm text-secondary">{{.Description}}</td>
+            </tr>
             {{end}}
-        </div>
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="empty-state">
+        <p class="text-muted text-sm">No templates available.</p>
+      </div>
+      {{end}}
     </div>
+  </div>
 
-    <div class="card">
-        <h3>Render Template</h3>
-        <form id="renderForm">
-            <div class="form-group">
-                <label>Template</label>
-                <select name="template" id="templateSelect">
-                    {{range .Templates}}
-                    <option value="{{.Name}}">{{.Name}}</option>
-                    {{end}}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Code Input</label>
-                <textarea name="code" rows="10" placeholder="Paste source code here..." id="codeInput"></textarea>
-            </div>
-            <button type="submit" class="btn">Render</button>
-        </form>
-        <div id="renderResult" class="card hidden" style="margin-top: 1rem;">
-            <h4>Rendered</h4>
-            <pre id="renderOutput" style="white-space: pre-wrap; max-height: 400px; overflow-y: auto;"></pre>
+  <div class="card">
+    <div class="card-header"><h3>Render Template</h3></div>
+    <div class="card-body">
+      <form id="prompt-form" onsubmit="return renderPrompt(event)">
+        <div class="form-group">
+          <label class="form-label">Template</label>
+          <select class="form-select" id="prompt-select">
+            {{range .Templates}}
+            <option value="{{.Name}}">{{.Name}}</option>
+            {{end}}
+          </select>
         </div>
+        <div class="form-group">
+          <label class="form-label">Code</label>
+          <textarea class="form-textarea" id="prompt-code" rows="8" placeholder="Paste your code here..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary w-full" id="prompt-btn">Render Prompt</button>
+      </form>
     </div>
+  </div>
+</div>
+
+<div class="card mt-6 hidden" id="prompt-result">
+  <div class="card-header">
+    <h3>Rendered Output</h3>
+    <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('prompt-output').textContent).then(function(){showToast('Copied','info')})">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      Copy
+    </button>
+  </div>
+  <div class="card-body">
+    <div class="code-block" id="prompt-output" style="white-space:pre-wrap;"></div>
+  </div>
 </div>
 
 <script>
-document.getElementById('renderForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const template = form.template.value;
-    const code = form.code.value;
-    const resultDiv = document.getElementById('renderResult');
-    const output = document.getElementById('renderOutput');
+function renderPrompt(e) {
+  e.preventDefault();
+  var btn = document.getElementById('prompt-btn');
+  setLoading(btn, true);
 
-    try {
-        const res = await fetch('/api/prompts/render', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({template, code})
-        });
-        const data = await res.json();
-        output.textContent = data.rendered;
-        resultDiv.classList.remove('hidden');
-    } catch (err) {
-        output.textContent = 'Error: ' + err.message;
-        resultDiv.classList.remove('hidden');
-    }
-});
+  apiCall('POST', '/api/prompts/render', {
+    template: document.getElementById('prompt-select').value,
+    code: document.getElementById('prompt-code').value
+  }).then(function(d) {
+    document.getElementById('prompt-result').classList.remove('hidden');
+    document.getElementById('prompt-output').textContent = d.rendered || '';
+    showToast('Prompt rendered', 'info');
+  }).catch(function(err) {
+    showToast('Render failed: ' + err.message, 'error');
+  }).finally(function() { setLoading(btn, false); });
+  return false;
+}
 </script>
 {{end}}

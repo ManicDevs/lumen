@@ -221,6 +221,51 @@ func TestHandleUIRoot(t *testing.T) {
 	if w.Code != http.StatusSeeOther {
 		t.Errorf("expected 303, got %d", w.Code)
 	}
+	if loc := w.Header().Get("Location"); loc != "/dashboard" {
+		t.Errorf("redirect to /dashboard, got %s", loc)
+	}
+}
+
+func TestHandleUIDashboard(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t)
+	req := httptest.NewRequest("GET", "/dashboard", nil)
+	w := httptest.NewRecorder()
+	s.server.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "Dashboard") {
+		t.Error("expected 'Dashboard' in response")
+	}
+	if !strings.Contains(body, "lumen.css") {
+		t.Error("expected lumen.css in response")
+	}
+}
+
+func TestHandleUIAllPages(t *testing.T) {
+	t.Parallel()
+	s := newTestServer(t)
+	pages := []string{"/dashboard", "/datasets", "/generate", "/models", "/eval", "/train", "/prompts", "/git", "/versions"}
+	for _, page := range pages {
+		t.Run(page, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest("GET", page, nil)
+			w := httptest.NewRecorder()
+			s.server.Handler.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Errorf("%s: expected 200, got %d", page, w.Code)
+			}
+			body := w.Body.String()
+			if !strings.Contains(body, "lumen.css") {
+				t.Errorf("%s: missing CSS", page)
+			}
+			if !strings.Contains(body, "sidebar") {
+				t.Errorf("%s: missing sidebar", page)
+			}
+		})
+	}
 }
 
 func TestScoreResponse(t *testing.T) {

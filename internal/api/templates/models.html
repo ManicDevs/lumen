@@ -1,52 +1,49 @@
 {{define "content"}}
-<h2>Available Models</h2>
+<p class="text-sm text-secondary mb-6">All models available on the connected Ollama instance.</p>
 
-<div id="modelsList" class="loading">Loading models...</div>
+<div class="flex items-center justify-between mb-6">
+  <div id="model-count" class="text-sm text-muted"></div>
+  <button class="btn btn-secondary btn-sm" onclick="loadModels()">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    Refresh
+  </button>
+</div>
+
+<div id="models-grid" class="grid-3">
+  <div class="loading" style="grid-column:1/-1;"><span class="spinner"></span> Loading models...</div>
+</div>
 
 <script>
-async function loadModels() {
-    try {
-        const res = await fetch('/api/models');
-        const data = await res.json();
-        const container = document.getElementById('modelsList');
-        if (!data.models || data.models.length === 0) {
-            container.innerHTML = '<p>No models found</p>';
-            return;
-        }
-        container.innerHTML = data.models.map(m => `
-            <div class="model-card">
-                <h3>${m.name}</h3>
-                <p><strong>Size:</strong> ${formatBytes(m.size)}</p>
-                <p><strong>Family:</strong> ${m.details.family || 'N/A'}</p>
-                <p><strong>Params:</strong> ${m.details.parameter_size || 'N/A'}</p>
-                <p><strong>Quant:</strong> ${m.details.quantization_level || 'N/A'}</p>
-                <p><strong>Modified:</strong> ${new Date(m.modified_at).toLocaleString()}</p>
-            </div>
-        `).join('');
-    } catch (err) {
-        document.getElementById('modelsList').innerHTML = '<p class="error">Error loading models: ' + err.message + '</p>';
+function loadModels() {
+  var el = document.getElementById('models-grid');
+  el.innerHTML = '<div class="loading" style="grid-column:1/-1;"><span class="spinner"></span> Loading models...</div>';
+  apiCall('GET', '/api/models').then(function(d) {
+    var models = d.models || [];
+    document.getElementById('model-count').textContent = models.length + ' model' + (models.length !== 1 ? 's' : '');
+    if (models.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">&#x1f4e6;</div><h3>No models found</h3><p>Pull a model from Ollama to get started.</p></div>';
+      return;
     }
+    var html = '';
+    models.forEach(function(m) {
+      var details = m.details || {};
+      html += '<div class="card"><div class="card-body">';
+      html += '<div class="flex items-center justify-between mb-3">';
+      html += '<h3 class="text-sm font-semibold" style="word-break:break-all;">' + esc(m.name || m.model) + '</h3>';
+      html += '<span class="badge badge-brand">' + (details.parameter_size || '') + '</span>';
+      html += '</div>';
+      html += '<div class="flex flex-col gap-3">';
+      html += '<div class="flex justify-between text-sm"><span class="text-muted">Size</span><span class="font-mono">' + formatBytes(m.size) + '</span></div>';
+      if (details.family) html += '<div class="flex justify-between text-sm"><span class="text-muted">Family</span><span>' + esc(details.family) + '</span></div>';
+      if (details.quantization_level) html += '<div class="flex justify-between text-sm"><span class="text-muted">Quantization</span><span class="badge badge-neutral">' + esc(details.quantization_level) + '</span></div>';
+      if (m.modified_at) html += '<div class="flex justify-between text-sm"><span class="text-muted">Modified</span><span class="text-secondary">' + new Date(m.modified_at).toLocaleDateString() + '</span></div>';
+      html += '</div></div></div>';
+    });
+    el.innerHTML = html;
+  }).catch(function(err) {
+    el.innerHTML = '<div class="alert alert-error" style="grid-column:1/-1;">Failed to load models: ' + esc(err.message) + '</div>';
+  });
 }
-
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
 loadModels();
 </script>
-
-<style>
-.model-card {
-    border: 1px solid #eee;
-    border-radius: 8px;
-    padding: 1rem;
-    margin: 0.5rem 0;
-    background: #fafafa;
-}
-.model-card h3 { margin-top: 0; color: #1a1a2e; }
-</style>
 {{end}}

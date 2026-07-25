@@ -1,127 +1,143 @@
 {{define "content"}}
-<h2>Dataset Versions</h2>
+<div class="tabs mb-6">
+  <a href="/datasets" class="tab">Commits</a>
+  <a href="/generate" class="tab">Generate</a>
+  <a href="/versions" class="tab active">Versions</a>
+</div>
 
-<div class="grid">
-    <div class="card" style="grid-column: 1 / -1;">
-        <h2>Version History</h2>
-        <div id="versionsList" class="loading">Loading versions...</div>
+<div class="grid-2 mb-8">
+  <div class="card">
+    <div class="card-header"><h3>Create Version</h3></div>
+    <div class="card-body">
+      <form id="version-form" onsubmit="return createVersion(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Tag</label>
+            <input type="text" class="form-input" id="ver-tag" placeholder="v1.0.0">
+            <div class="form-hint">Auto-prefixed with 'v' if missing</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Message</label>
+            <input type="text" class="form-input" id="ver-msg" placeholder="Initial release">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-full" id="ver-btn">Create Version</button>
+      </form>
     </div>
+  </div>
 
-    <div class="card">
-        <h2>Create Version</h2>
-        <form id="createVersionForm" class="form">
-            <div class="form-group">
-                <label>Tag Name</label>
-                <input type="text" name="tag" placeholder="v1.0.0" required>
-            </div>
-            <div class="form-group">
-                <label>Message</label>
-                <input type="text" name="message" placeholder="Release description">
-            </div>
-            <button type="submit" class="btn">Create Version</button>
-        </form>
-        <div id="createResult" class="hidden" style="margin-top: 1rem;"></div>
+  <div class="card">
+    <div class="card-header"><h3>Diff Versions</h3></div>
+    <div class="card-body">
+      <form id="diff-form" onsubmit="return diffVersions(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">From Version</label>
+            <input type="text" class="form-input" id="diff-from" placeholder="v1.0.0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">To Version</label>
+            <input type="text" class="form-input" id="diff-to" placeholder="v1.1.0">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-secondary w-full" id="diff-btn">Compare Versions</button>
+      </form>
     </div>
+  </div>
+</div>
 
-    <div class="card">
-        <h2>Diff Versions</h2>
-        <form id="diffForm" class="form">
-            <div class="form-group">
-                <label>From Version ID</label>
-                <input type="text" name="from_id" placeholder="commit_abc123" required>
-            </div>
-            <div class="form-group">
-                <label>To Version ID</label>
-                <input type="text" name="to_id" placeholder="commit_def456" required>
-            </div>
-            <button type="submit" class="btn secondary">Compare</button>
-        </form>
-        <div id="diffResult" class="hidden" style="margin-top: 1rem;"></div>
-    </div>
+<div class="card mb-8">
+  <div class="card-header">
+    <h3>Version History</h3>
+    <button class="btn btn-ghost btn-sm" onclick="loadVersions()">Refresh</button>
+  </div>
+  <div class="card-body" style="padding:0;" id="versions-list">
+    <div class="loading"><span class="spinner"></span> Loading versions...</div>
+  </div>
+</div>
+
+<div class="card hidden" id="diff-result">
+  <div class="card-header">
+    <h3>Diff Result</h3>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('diff-result').classList.add('hidden')">Close</button>
+  </div>
+  <div class="card-body">
+    <div class="code-block" id="diff-output" style="white-space:pre-wrap;"></div>
+  </div>
 </div>
 
 <script>
-async function loadVersions() {
-    const el = document.getElementById('versionsList');
-    try {
-        const res = await fetch('/api/dataset/versions');
-        const data = await res.json();
-        if (!data.versions || data.versions.length === 0) {
-            el.innerHTML = '<p>No versions found. Create one above.</p>';
-            el.classList.remove('loading');
-            return;
-        }
-        let html = '<table class="table"><thead><tr><th>ID</th><th>Tag</th><th>Message</th><th>Datapoints</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
-        for (const v of data.versions) {
-            html += '<tr>';
-            html += '<td><code>' + (v.id || '').substring(0, 16) + '...</code></td>';
-            html += '<td>' + (v.tag || '-') + '</td>';
-            html += '<td>' + (v.message || '-') + '</td>';
-            html += '<td>' + (v.datapoints || 0) + '</td>';
-            html += '<td>' + (v.created_at || '-') + '</td>';
-            html += '<td><button class="btn secondary" onclick="rollbackVersion(\'' + v.id + '\')">Rollback</button></td>';
-            html += '</tr>';
-        }
-        html += '</tbody></table>';
-        el.innerHTML = html;
-    } catch (err) {
-        el.innerHTML = '<p class="status error">Error loading versions: ' + err.message + '</p>';
+function loadVersions() {
+  var el = document.getElementById('versions-list');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span> Loading versions...</div>';
+  apiCall('GET', '/api/dataset/versions').then(function(d) {
+    var versions = d.versions || [];
+    if (versions.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x1f4c1;</div><h3>No versions</h3><p>Create your first version to start tracking.</p></div>';
+      return;
     }
-    el.classList.remove('loading');
+    var html = '<div class="timeline" style="padding:1.5rem 2rem;">';
+    versions.reverse().forEach(function(v) {
+      html += '<div class="timeline-item">';
+      html += '<div class="tl-time">' + esc(v.created_at || '') + '</div>';
+      html += '<div class="flex items-center justify-between">';
+      html += '<div><span class="tl-title font-mono">' + esc(v.tag || v.id) + '</span>';
+      if (v.message) html += ' <span class="text-sm text-muted">&mdash; ' + esc(v.message) + '</span>';
+      html += '</div>';
+      html += '<div class="flex items-center gap-3">';
+      html += '<span class="badge badge-neutral">' + (v.datapoints || 0) + ' pts</span>';
+      html += '<button class="btn btn-ghost btn-sm" onclick="rollbackVersion(\'' + esc(v.id) + '\')">Rollback</button>';
+      html += '</div></div></div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  }).catch(function(err) {
+    el.innerHTML = '<div class="alert alert-error">Failed to load versions: ' + esc(err.message) + '</div>';
+  });
 }
 
-async function rollbackVersion(id) {
-    if (!confirm('Rollback to version ' + id + '?')) return;
-    try {
-        const res = await fetch('/api/dataset/versions/' + id + '/rollback', {method: 'POST'});
-        const data = await res.json();
-        alert(data.status === 'rolled_back' ? 'Rolled back successfully' : 'Error: ' + JSON.stringify(data));
-        loadVersions();
-    } catch (err) {
-        alert('Error: ' + err.message);
-    }
+function createVersion(e) {
+  e.preventDefault();
+  var btn = document.getElementById('ver-btn');
+  setLoading(btn, true);
+  apiCall('POST', '/api/dataset/versions', {
+    tag: document.getElementById('ver-tag').value,
+    message: document.getElementById('ver-msg').value
+  }).then(function(d) {
+    showToast('Version created: ' + (d.tag || d.id), 'success');
+    document.getElementById('ver-tag').value = '';
+    document.getElementById('ver-msg').value = '';
+    loadVersions();
+  }).catch(function(err) {
+    showToast('Create failed: ' + err.message, 'error');
+  }).finally(function() { setLoading(btn, false); });
+  return false;
 }
 
-document.getElementById('createVersionForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const btn = form.querySelector('button');
-    btn.disabled = true;
-    try {
-        const res = await fetch('/api/dataset/versions', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({tag: form.tag.value, message: form.message.value})
-        });
-        const data = await res.json();
-        const el = document.getElementById('createResult');
-        el.classList.remove('hidden');
-        el.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-        loadVersions();
-    } catch (err) {
-        alert('Error: ' + err.message);
-    } finally {
-        btn.disabled = false;
-    }
-});
+function rollbackVersion(id) {
+  if (!confirm('Rollback to version ' + id + '? This will restore dataset state.')) return;
+  apiCall('POST', '/api/dataset/versions/' + id + '/rollback', {}).then(function(d) {
+    showToast('Rolled back to ' + id, 'success');
+    loadVersions();
+  }).catch(function(err) {
+    showToast('Rollback failed: ' + err.message, 'error');
+  });
+}
 
-document.getElementById('diffForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const btn = form.querySelector('button');
-    btn.disabled = true;
-    try {
-        const res = await fetch('/api/dataset/versions/' + form.from_id.value + '/diff/' + form.to_id.value);
-        const data = await res.json();
-        const el = document.getElementById('diffResult');
-        el.classList.remove('hidden');
-        el.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-    } catch (err) {
-        alert('Error: ' + err.message);
-    } finally {
-        btn.disabled = false;
-    }
-});
+function diffVersions(e) {
+  e.preventDefault();
+  var btn = document.getElementById('diff-btn');
+  setLoading(btn, true);
+  var from = document.getElementById('diff-from').value;
+  var to = document.getElementById('diff-to').value;
+  apiCall('GET', '/api/dataset/versions/' + from + '/diff/' + to).then(function(d) {
+    document.getElementById('diff-result').classList.remove('hidden');
+    document.getElementById('diff-output').textContent = JSON.stringify(d, null, 2);
+  }).catch(function(err) {
+    showToast('Diff failed: ' + err.message, 'error');
+  }).finally(function() { setLoading(btn, false); });
+  return false;
+}
 
 loadVersions();
 </script>

@@ -1,32 +1,53 @@
 {{define "content"}}
-<div class="tabs">
-    <a href="/datasets?format=html" class="tab">List Commits</a>
-    <a href="/datasets/generate?format=html" class="tab">Generate Data</a>
-    <a href="/datasets/export?format=html" class="tab">Export</a>
-    <a href="/datasets/curate?format=html" class="tab">Curate</a>
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <p class="text-sm text-secondary">Track and manage your dataset commits, exports, and curation runs.</p>
+  </div>
 </div>
 
-<div id="commits" class="tab-content active">
-    <h2>Dataset Commits</h2>
+<div class="tabs mb-6">
+  <a href="/datasets" class="tab active">Commits</a>
+  <a href="/generate" class="tab">Generate</a>
+  <a href="/versions" class="tab">Versions</a>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3>Dataset Commits</h3>
+    <span class="badge badge-neutral">{{.TotalCommits}} total</span>
+  </div>
+  <div class="card-body" style="padding:0;">
     {{if .Commits}}
-    <table class="table">
+    <div class="table-wrap">
+      <table class="table">
         <thead>
-            <tr><th>Commit ID</th><th>Timestamp</th><th>Model</th><th>Datapoints</th></tr>
+          <tr>
+            <th>Commit ID</th>
+            <th>Timestamp</th>
+            <th>Model</th>
+            <th class="cell-right">Datapoints</th>
+          </tr>
         </thead>
         <tbody>
-            {{range .Commits}}
-            <tr>
-                <td><code>{{shortID .CommitID}}</code></td>
-                <td>{{.Timestamp}}</td>
-                <td>{{.Model}}</td>
-                <td>{{.Datapoints}}</td>
-            </tr>
-            {{end}}
+          {{range .Commits}}
+          <tr>
+            <td class="cell-mono text-sm">{{shortID .CommitID}}</td>
+            <td class="text-sm text-secondary">{{.Timestamp}}</td>
+            <td><span class="badge badge-brand">{{.Model}}</span></td>
+            <td class="cell-right font-semibold">{{.Datapoints}}</td>
+          </tr>
+          {{end}}
         </tbody>
-    </table>
-    <p>Total: {{.TotalCommits}} commits</p>
+      </table>
+    </div>
     {{else}}
-    <p class="loading">No commits found. Generate some data first.</p>
+    <div class="empty-state">
+      <div class="empty-icon">&#x1f4e6;</div>
+      <h3>No dataset commits</h3>
+      <p>Generate a dataset to see commits here.</p>
+      <a href="/generate" class="btn btn-primary">Generate Dataset</a>
+    </div>
     {{end}}
+  </div>
 </div>
 {{end}}

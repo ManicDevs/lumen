@@ -1,148 +1,136 @@
 {{define "content"}}
-<h2>Generate Training Data</h2>
-
-<div class="tabs">
-    <div class="tab active" onclick="showTab('single')">Single Generate</div>
-    <div class="tab" onclick="showTab('batch')">Batch Generate</div>
+<div class="tabs mb-6">
+  <a href="/datasets" class="tab">Commits</a>
+  <a href="/generate" class="tab active">Generate</a>
+  <a href="/versions" class="tab">Versions</a>
 </div>
 
-<div id="tab-single" class="tab-content active">
-    <form id="generateForm" class="form">
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><h3>Single Generate</h3></div>
+    <div class="card-body">
+      <form id="gen-form" onsubmit="return runGenerate(event)">
         <div class="form-group">
-            <label>Target Path (optional)</label>
-            <input type="text" name="target_path" placeholder="./internal/agent" help="Harvest code from this directory for context">
+          <label class="form-label">Target Path <span class="text-muted">(optional)</span></label>
+          <input type="text" class="form-input" id="gen-path" placeholder="/path/to/source/code">
+          <div class="form-hint">Source code path to harvest from</div>
         </div>
         <div class="form-group">
-            <label>Topic (optional)</label>
-            <input type="text" name="topic" placeholder="Analyze this code for bugs and performance issues">
+          <label class="form-label">Topic <span class="text-muted">(optional)</span></label>
+          <input type="text" class="form-input" id="gen-topic" placeholder="Go concurrency patterns">
         </div>
-        <div class="form-group">
-            <label>Model</label>
-            <select name="model">
-                <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
-                <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Model</label>
+            <select class="form-select" id="gen-model">
+              <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
+              <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
             </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mode</label>
+            <select class="form-select" id="gen-mode">
+              <option value="single">Single Pass</option>
+              <option value="continuous">Continuous (5 iterations)</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-full" id="gen-btn">Generate Dataset</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Batch Generate</h3></div>
+    <div class="card-body">
+      <form id="batch-form" onsubmit="return runBatch(event)">
+        <div class="form-group">
+          <label class="form-label">Topics <span class="text-muted">(one per line)</span></label>
+          <textarea class="form-textarea" id="batch-topics" rows="5" placeholder="SQL injection prevention&#10;Concurrent goroutine patterns&#10;HTTP middleware design"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Target Path</label>
+            <input type="text" class="form-input" id="batch-path" placeholder="/path/to/source">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Parallel Jobs</label>
+            <select class="form-select" id="batch-parallel">
+              <option value="2" selected>2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+            </select>
+          </div>
         </div>
         <div class="form-group">
-            <label>Mode</label>
-            <select name="continuous">
-                <option value="false">Single Pass</option>
-                <option value="true">Continuous (5 iterations)</option>
-            </select>
+          <label class="form-label">Model</label>
+          <select class="form-select" id="batch-model">
+            <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
+            <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+          </select>
         </div>
-        <button type="submit" class="btn btn-primary">Generate & Commit</button>
-    </form>
+        <button type="submit" class="btn btn-primary w-full" id="batch-btn">Run Batch</button>
+      </form>
+    </div>
+  </div>
 </div>
 
-<div id="tab-batch" class="tab-content">
-    <form id="batchForm" class="form">
-        <div class="form-group">
-            <label>Topics (one per line)</label>
-            <textarea name="topics" rows="8" placeholder="Find security vulnerabilities in this auth handler
-Optimize database queries for performance
-Review concurrent goroutine patterns
-Analyze error handling in API layer"></textarea>
-        </div>
-        <div class="form-group">
-            <label>Target Path (optional, shared across jobs)</label>
-            <input type="text" name="target_path" placeholder="./internal/agent">
-        </div>
-        <div class="form-group">
-            <label>Model</label>
-            <select name="model">
-                <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
-                <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>Parallel Jobs (1-8)</label>
-            <input type="number" name="parallel" value="2" min="1" max="8">
-        </div>
-        <button type="submit" class="btn">Run Batch Generate</button>
-    </form>
+<div class="card mt-6 hidden" id="gen-result">
+  <div class="card-header">
+    <h3>Result</h3>
+    <span class="badge badge-success" id="gen-status">Completed</span>
+  </div>
+  <div class="card-body">
+    <div class="code-block" id="gen-output"></div>
+  </div>
 </div>
-
-<div id="result" class="hidden" style="margin-top: 2rem;"></div>
 
 <script>
-function showTab(name) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
-    document.getElementById('tab-' + name).classList.add('active');
+function runGenerate(e) {
+  e.preventDefault();
+  var btn = document.getElementById('gen-btn');
+  setLoading(btn, true);
+  var body = {
+    model: document.getElementById('gen-model').value,
+    continuous: document.getElementById('gen-mode').value === 'continuous',
+    max_iterations: document.getElementById('gen-mode').value === 'continuous' ? 5 : 1
+  };
+  var path = document.getElementById('gen-path').value.trim();
+  var topic = document.getElementById('gen-topic').value.trim();
+  if (path) body.target_path = path;
+  if (topic) body.topic = topic;
+
+  apiCall('POST', '/api/datasets/generate', body).then(function(d) {
+    document.getElementById('gen-result').classList.remove('hidden');
+    document.getElementById('gen-output').textContent = JSON.stringify(d, null, 2);
+    showToast('Dataset generated successfully', 'success');
+  }).catch(function(err) {
+    showToast('Generation failed: ' + err.message, 'error');
+  }).finally(function() { setLoading(btn, false); });
+  return false;
 }
 
-document.getElementById('generateForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const btn = form.querySelector('button');
-    btn.disabled = true;
-    btn.textContent = 'Generating...';
-    
-    const data = {
-        target_path: form.target_path.value || '',
-        topic: form.topic.value || '',
-        model: form.model.value,
-        continuous: form.continuous.value === 'true',
-        pipe_dataset: true
+function runBatch(e) {
+  e.preventDefault();
+  var btn = document.getElementById('batch-btn');
+  setLoading(btn, true);
+  var topics = document.getElementById('batch-topics').value.trim().split('\n').filter(function(t){return t.trim();});
+  var jobs = topics.map(function(t) {
+    return {
+      topic: t.trim(),
+      target_path: document.getElementById('batch-path').value.trim() || undefined,
+      model: document.getElementById('batch-model').value
     };
-    
-    try {
-        const res = await fetch('/api/datasets/generate', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        const resultDiv = document.getElementById('result');
-        resultDiv.classList.remove('hidden');
-        resultDiv.innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
-    } catch (err) {
-        alert('Error: ' + err.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Generate & Commit';
-    }
-});
+  });
 
-document.getElementById('batchForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const btn = form.querySelector('button');
-    btn.disabled = true;
-    btn.textContent = 'Running batch...';
-    
-    const topics = form.topics.value.split('\n').filter(t => t.trim());
-    const jobs = topics.map(topic => ({
-        topic: topic.trim(),
-        target_path: form.target_path.value || '',
-        model: form.model.value,
-        continuous: false,
-        pipe_dataset: true,
-        max_iterations: 1
-    }));
-    
-    const data = {
-        jobs: jobs,
-        parallel: parseInt(form.parallel.value) || 2
-    };
-    
-    try {
-        const res = await fetch('/api/datasets/batch', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        const resultDiv = document.getElementById('result');
-        resultDiv.classList.remove('hidden');
-        resultDiv.innerHTML = '<pre>' + JSON.stringify(result, null, 2) + '</pre>';
-    } catch (err) {
-        alert('Error: ' + err.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Run Batch Generate';
-    }
-});
+  apiCall('POST', '/api/datasets/batch', { jobs: jobs, parallel: parseInt(document.getElementById('batch-parallel').value) }).then(function(d) {
+    document.getElementById('gen-result').classList.remove('hidden');
+    document.getElementById('gen-output').textContent = JSON.stringify(d, null, 2);
+    showToast('Batch generation completed', 'success');
+  }).catch(function(err) {
+    showToast('Batch failed: ' + err.message, 'error');
+  }).finally(function() { setLoading(btn, false); });
+  return false;
+}
 </script>
 {{end}}

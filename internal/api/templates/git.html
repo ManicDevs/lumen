@@ -1,61 +1,103 @@
 {{define "content"}}
-<h2>Git Status</h2>
+<p class="text-sm text-secondary mb-6">Version control for dataset commits.</p>
 
-{{if .IsRepo}}
-<p>Dataset repository: <strong>initialized</strong></p>
-{{else}}
-<p>Dataset repository: <strong>not a git repo</strong></p>
-{{end}}
-
-<div class="grid">
-    <div class="card">
-        <h3>Working Tree</h3>
-        <table class="table">
-            <thead><tr><th>Status</th><th>Count</th></tr></thead>
-            <tbody>
-                <tr><td>Staged</td><td>{{.Staged}}</td></tr>
-                <tr><td>Modified</td><td>{{.Modified}}</td></tr>
-                <tr><td>Untracked</td><td>{{.Untracked}}</td></tr>
-            </tbody>
-        </table>
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header">
+      <h3>Repository Status</h3>
+      <button class="btn btn-ghost btn-sm" onclick="loadGitStatus()">Refresh</button>
     </div>
-
-    <div class="card">
-        <h3>Commit Changes</h3>
-        <form id="commitForm">
-            <div class="form-group">
-                <label>Commit Message</label>
-                <textarea name="message" rows="3" placeholder="dataset: auto-commit at ..."></textarea>
-            </div>
-            <button type="submit" class="btn">Commit</button>
-        </form>
-        <div id="commitResult" class="status hidden" style="margin-top: 1rem;"></div>
+    <div class="card-body">
+      <div id="git-status-content">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="status-dot {{if .IsRepo}}green{{else}}red{{end}}"></span>
+          <span class="text-sm font-semibold">{{if .IsRepo}}Initialized{{else}}Not a Git repository{{end}}</span>
+        </div>
+        {{if .IsRepo}}
+        <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:0;">
+          <div class="stat-card" style="padding:1rem;">
+            <div class="stat-value" style="font-size:1.25rem;">{{.Staged}}</div>
+            <div class="stat-label">Staged</div>
+          </div>
+          <div class="stat-card" style="padding:1rem;">
+            <div class="stat-value" style="font-size:1.25rem;">{{.Modified}}</div>
+            <div class="stat-label">Modified</div>
+          </div>
+          <div class="stat-card" style="padding:1rem;">
+            <div class="stat-value" style="font-size:1.25rem;">{{.Untracked}}</div>
+            <div class="stat-label">Untracked</div>
+          </div>
+        </div>
+        {{end}}
+      </div>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Commit Changes</h3></div>
+    <div class="card-body">
+      {{if .IsRepo}}
+      <form id="commit-form" onsubmit="return gitCommit(event)">
+        <div class="form-group">
+          <label class="form-label">Commit Message</label>
+          <textarea class="form-textarea" id="commit-msg" rows="3" placeholder="feat(dataset): add new training data"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary w-full" id="commit-btn">Commit Dataset</button>
+      </form>
+      <div class="alert alert-info mt-4" style="margin-bottom:0;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span class="text-sm">Commits all staged dataset changes with the message above.</span>
+      </div>
+      {{else}}
+      <div class="empty-state" style="padding:2rem;">
+        <p class="text-muted text-sm">Initialize git in the dataset directory first.</p>
+      </div>
+      {{end}}
+    </div>
+  </div>
+</div>
+
+<div class="card mt-6 hidden" id="commit-result">
+  <div class="card-header">
+    <h3>Commit Result</h3>
+    <span class="badge badge-success">Success</span>
+  </div>
+  <div class="card-body">
+    <div class="flex items-center gap-3">
+      <span class="text-sm text-muted">SHA:</span>
+      <span class="font-mono text-sm" id="commit-sha"></span>
+    </div>
+  </div>
 </div>
 
 <script>
-document.getElementById('commitForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const form = e.target;
-    const message = form.message.value || 'dataset: auto-commit';
-    const resultDiv = document.getElementById('commitResult');
+function gitCommit(e) {
+  e.preventDefault();
+  var btn = document.getElementById('commit-btn');
+  setLoading(btn, true);
 
-    try {
-        const res = await fetch('/api/git/commit', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({message})
-        });
-        const data = await res.json();
-        resultDiv.classList.remove('hidden');
-        resultDiv.className = 'status success';
-        resultDiv.innerHTML = '<strong>Committed:</strong> ' + (data.sha || 'OK') + ' — ' + data.status;
-        setTimeout(function() { location.reload(); }, 2000);
-    } catch (err) {
-        resultDiv.classList.remove('hidden');
-        resultDiv.className = 'status error';
-        resultDiv.textContent = 'Error: ' + err.message;
+  apiCall('POST', '/api/git/commit', {
+    message: document.getElementById('commit-msg').value
+  }).then(function(d) {
+    document.getElementById('commit-result').classList.remove('hidden');
+    document.getElementById('commit-sha').textContent = d.sha || '';
+    showToast('Committed: ' + (d.sha || '').substring(0, 8), 'success');
+    setTimeout(function() { location.reload(); }, 2000);
+  }).catch(function(err) {
+    showToast('Commit failed: ' + err.message, 'error');
+  }).finally(function() { setLoading(btn, false); });
+  return false;
+}
+
+function loadGitStatus() {
+  apiCall('GET', '/api/git/status').then(function(d) {
+    var cards = document.querySelectorAll('#git-status-content .stat-value');
+    if (cards.length >= 3) {
+      cards[0].textContent = d.staged || 0;
+      cards[1].textContent = d.modified || 0;
+      cards[2].textContent = d.untracked || 0;
     }
-});
+  });
+}
 </script>
 {{end}}

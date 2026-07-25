@@ -96,6 +96,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *Server {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("internal/api/static"))))
 
 	// UI routes
+	mux.HandleFunc("GET /dashboard", s.handleUIDashboard)
 	mux.HandleFunc("GET /datasets", s.handleUIDatasets)
 	mux.HandleFunc("GET /generate", s.handleUIGenerate)
 	mux.HandleFunc("GET /models", s.handleUIModels)
@@ -132,7 +133,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *Server {
 			http.NotFound(w, r)
 			return
 		}
-		http.Redirect(w, r, "/datasets", http.StatusSeeOther)
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 	})
 
 	handler := s.withCORS(mux)
@@ -825,6 +826,23 @@ func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleUIDashboard(w http.ResponseWriter, r *http.Request) {
+	if s.tmpl == nil {
+		http.Error(w, "templates not loaded", http.StatusInternalServerError)
+		return
+	}
+	data := struct {
+		Page      string
+		PageTitle string
+		Version   string
+	}{
+		Page:      "dashboard",
+		PageTitle: "Dashboard",
+		Version:   version.Version,
+	}
+	s.renderTemplate(w, "dashboard.html", data)
+}
+
 func (s *Server) handleUIDatasets(w http.ResponseWriter, r *http.Request) {
 	if s.tmpl == nil {
 		http.Error(w, "templates not loaded", http.StatusInternalServerError)
@@ -841,12 +859,14 @@ func (s *Server) handleUIDatasets(w http.ResponseWriter, r *http.Request) {
 	commits := s.getCommits()
 	data := struct {
 		Page         string
+		PageTitle    string
 		Version      string
 		Commits      []map[string]any
 		TotalCommits int
 		Models       []any
 	}{
 		Page:         "datasets",
+		PageTitle:    "Datasets",
 		Version:      version.Version,
 		Commits:      commits,
 		TotalCommits: len(commits),
@@ -861,11 +881,13 @@ func (s *Server) handleUIGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := struct {
-		Page    string
-		Version string
+		Page      string
+		PageTitle string
+		Version   string
 	}{
-		Page:    "generate",
-		Version: version.Version,
+		Page:      "generate",
+		PageTitle: "Generate Data",
+		Version:   version.Version,
 	}
 	s.renderTemplate(w, "generate.html", data)
 }
@@ -878,12 +900,14 @@ func (s *Server) handleUIPrompts(w http.ResponseWriter, r *http.Request) {
 	templates := prompt.List()
 	data := struct {
 		Page      string
+		PageTitle string
 		Version   string
 		Templates []prompt.Template
 		Selected  string
 		Rendered  string
 	}{
 		Page:      "prompts",
+		PageTitle: "Prompts",
 		Version:   version.Version,
 		Templates: templates,
 	}
@@ -901,6 +925,7 @@ func (s *Server) handleUIGit(w http.ResponseWriter, r *http.Request) {
 	}
 	data := struct {
 		Page      string
+		PageTitle string
 		Version   string
 		Staged    int
 		Modified  int
@@ -908,6 +933,7 @@ func (s *Server) handleUIGit(w http.ResponseWriter, r *http.Request) {
 		IsRepo    bool
 	}{
 		Page:      "git",
+		PageTitle: "Git",
 		Version:   version.Version,
 		Staged:    status.Staged,
 		Modified:  status.Modified,
@@ -931,13 +957,15 @@ func (s *Server) handleUIModels(w http.ResponseWriter, r *http.Request) {
 		models[i] = m
 	}
 	data := struct {
-		Page    string
-		Version string
-		Models  []any
+		Page      string
+		PageTitle string
+		Version   string
+		Models    []any
 	}{
-		Page:    "models",
-		Version: version.Version,
-		Models:  models,
+		Page:      "models",
+		PageTitle: "Models",
+		Version:   version.Version,
+		Models:    models,
 	}
 	s.renderTemplate(w, "models.html", data)
 }
@@ -956,13 +984,15 @@ func (s *Server) handleUIEval(w http.ResponseWriter, r *http.Request) {
 		models[i] = m
 	}
 	data := struct {
-		Page    string
-		Version string
-		Models  []any
+		Page      string
+		PageTitle string
+		Version   string
+		Models    []any
 	}{
-		Page:    "eval",
-		Version: version.Version,
-		Models:  models,
+		Page:      "eval",
+		PageTitle: "Evaluation",
+		Version:   version.Version,
+		Models:    models,
 	}
 	s.renderTemplate(w, "eval.html", data)
 }
@@ -981,13 +1011,15 @@ func (s *Server) handleUITrain(w http.ResponseWriter, r *http.Request) {
 		models[i] = m
 	}
 	data := struct {
-		Page    string
-		Version string
-		Models  []any
+		Page      string
+		PageTitle string
+		Version   string
+		Models    []any
 	}{
-		Page:    "train",
-		Version: version.Version,
-		Models:  models,
+		Page:      "train",
+		PageTitle: "Train",
+		Version:   version.Version,
+		Models:    models,
 	}
 	s.renderTemplate(w, "train.html", data)
 }
@@ -1322,11 +1354,13 @@ func (s *Server) handleUIVersions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := struct {
-		Page    string
-		Version string
+		Page      string
+		PageTitle string
+		Version   string
 	}{
-		Page:    "versions",
-		Version: version.Version,
+		Page:      "versions",
+		PageTitle: "Versions",
+		Version:   version.Version,
 	}
 	s.renderTemplate(w, "versions.html", data)
 }
