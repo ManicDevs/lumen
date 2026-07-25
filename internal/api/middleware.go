@@ -99,8 +99,7 @@ func (gw *gzipResponseWriter) Unwrap() http.ResponseWriter {
 }
 
 // withCompression applies gzip compression when the client accepts it.
-// Responses with Content-Encoding already set or bodies smaller than
-// 1024 bytes are passed through uncompressed.
+// Responses with Content-Encoding already set are passed through uncompressed.
 func (s *Server) withCompression(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
@@ -115,6 +114,7 @@ func (s *Server) withCompression(next http.Handler) http.Handler {
 		}
 
 		w.Header().Set("Vary", "Accept-Encoding")
+		w.Header().Set("Content-Encoding", "gzip")
 
 		gz, err := gzip.NewWriterLevel(w, gzip.DefaultCompression)
 		if err != nil {
@@ -127,36 +127,10 @@ func (s *Server) withCompression(next http.Handler) http.Handler {
 			gz:             gz,
 		}
 
-		// Use a wrapper to capture Content-Length and status code.
-		tw := &trackingResponseWriter{ResponseWriter: gzw}
+		next.ServeHTTP(gzw, r)
 
-		next.ServeHTTP(tw, r)
-
-		gzw.gz.Close()
-
-		// Set Content-Encoding only after we know we're compressing.
-		w.Header().Set("Content-Encoding", "gzip")
+		gz.Close()
 	})
-}
-
-// trackingResponseWriter captures the written byte count and status code.
-type trackingResponseWriter struct {
-	http.ResponseWriter
-	written int64
-	status  int
-}
-
-// Write records bytes written and delegates to the underlying writer.
-func (tw *trackingResponseWriter) Write(b []byte) (int, error) {
-	n, err := tw.ResponseWriter.Write(b)
-	tw.written += int64(n)
-	return n, err
-}
-
-// WriteHeader records the status code and delegates to the underlying writer.
-func (tw *trackingResponseWriter) WriteHeader(code int) {
-	tw.status = code
-	tw.ResponseWriter.WriteHeader(code)
 }
 
 // bucket represents a token bucket for rate limiting.
