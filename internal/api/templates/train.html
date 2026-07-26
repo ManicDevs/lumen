@@ -8,16 +8,17 @@
       <form id="train-form" onsubmit="return runTrain(event)">
         <div class="form-group">
           <label class="form-label">Base Model</label>
-          <select class="form-select" id="train-model">
-            <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
-            <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
-          </select>
+          <select class="form-select" id="train-model"></select>
         </div>
         <div class="form-group">
           <label class="form-check">
             <input type="checkbox" id="train-all" checked>
             Use ALL commits (fresh + archived)
           </label>
+        </div>
+        <div class="alert alert-info mb-4" style="margin-bottom:1rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span class="text-sm">Few-shot training creates a new model by examples. Requires existing commits.</span>
         </div>
         <button type="submit" class="btn btn-primary w-full" id="train-btn">Start Training</button>
       </form>
@@ -35,12 +36,16 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">New Model Name</label>
-            <input type="text" class="form-input" id="lora-name" placeholder="lumen-lora">
+            <input type="text" class="form-input" id="lora-name" placeholder="lumen-lora" required>
           </div>
           <div class="form-group">
             <label class="form-label">Base Model</label>
-            <input type="text" class="form-input" id="lora-base" placeholder="qwen2.5-coder:3b">
+            <select class="form-select" id="lora-base"></select>
           </div>
+        </div>
+        <div class="alert alert-info mb-4" style="margin-bottom:1rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span class="text-sm">Upload a .gguf LoRA adapter to create a new model variant.</span>
         </div>
         <button type="submit" class="btn btn-primary w-full" id="lora-btn">Create LoRA Model</button>
       </form>
@@ -59,6 +64,22 @@
 </div>
 
 <script>
+function loadModels() {
+  return fetch('/api/models').then(function(r){return r.json();}).then(function(d) {
+    var models = d.models || [];
+    var sel1 = document.getElementById('train-model');
+    var sel2 = document.getElementById('lora-base');
+    sel1.innerHTML = '';
+    sel2.innerHTML = '';
+    models.forEach(function(m) {
+      var name = m.name || m.model;
+      sel1.innerHTML += '<option value="' + esc(name) + '">' + esc(name) + ' (' + formatBytes(m.size) + ')</option>';
+      sel2.innerHTML += '<option value="' + esc(name) + '">' + esc(name) + '</option>';
+    });
+    return models;
+  });
+}
+
 function runTrain(e) {
   e.preventDefault();
   var btn = document.getElementById('train-btn');
@@ -85,15 +106,16 @@ function runLoRA(e) {
     showToast('Select an adapter file', 'error');
     return false;
   }
+  var name = document.getElementById('lora-name').value.trim();
+  if (!name) { showToast('Enter a model name', 'error'); return false; }
 
   setLoading(btn, true);
   var reader = new FileReader();
   reader.onload = function() {
-    var adapterData = Array.from(new Uint8Array(reader.result));
     apiCall('POST', '/api/models/train-lora', {
-      adapter_path: adapterData.length.toString(),
-      model_name: document.getElementById('lora-name').value,
-      base_model: document.getElementById('lora-base').value || 'qwen2.5-coder:3b'
+      adapter_path: Array.from(new Uint8Array(reader.result)).length.toString(),
+      model_name: name,
+      base_model: document.getElementById('lora-base').value
     }).then(function(d) {
       document.getElementById('train-result').classList.remove('hidden');
       document.getElementById('train-output').textContent = JSON.stringify(d, null, 2);
@@ -105,5 +127,7 @@ function runLoRA(e) {
   reader.readAsArrayBuffer(fileInput.files[0]);
   return false;
 }
+
+loadModels();
 </script>
 {{end}}

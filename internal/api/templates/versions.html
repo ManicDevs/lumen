@@ -13,7 +13,7 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Tag</label>
-            <input type="text" class="form-input" id="ver-tag" placeholder="v1.0.0">
+            <input type="text" class="form-input" id="ver-tag" placeholder="v1.0.0" required>
             <div class="form-hint">Auto-prefixed with 'v' if missing</div>
           </div>
           <div class="form-group">
@@ -33,11 +33,11 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">From Version</label>
-            <input type="text" class="form-input" id="diff-from" placeholder="v1.0.0">
+            <input type="text" class="form-input" id="diff-from" placeholder="v1.0.0" required>
           </div>
           <div class="form-group">
             <label class="form-label">To Version</label>
-            <input type="text" class="form-input" id="diff-to" placeholder="v1.1.0">
+            <input type="text" class="form-input" id="diff-to" placeholder="v1.1.0" required>
           </div>
         </div>
         <button type="submit" class="btn btn-secondary w-full" id="diff-btn">Compare Versions</button>
@@ -59,7 +59,10 @@
 <div class="card hidden" id="diff-result">
   <div class="card-header">
     <h3>Diff Result</h3>
-    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('diff-result').classList.add('hidden')">Close</button>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('diff-result').classList.add('hidden')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      Close
+    </button>
   </div>
   <div class="card-body">
     <div class="code-block" id="diff-output" style="white-space:pre-wrap;"></div>
@@ -70,14 +73,15 @@
 function loadVersions() {
   var el = document.getElementById('versions-list');
   el.innerHTML = '<div class="loading"><span class="spinner"></span> Loading versions...</div>';
-  apiCall('GET', '/api/dataset/versions').then(function(d) {
+  fetch('/api/dataset/versions').then(function(r){return r.json();}).then(function(d) {
     var versions = d.versions || [];
-    if (versions.length === 0) {
+    if (!versions || versions.length === 0) {
       el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x1f4c1;</div><h3>No versions</h3><p>Create your first version to start tracking.</p></div>';
       return;
     }
+    versions.sort(function(a,b) { return (b.created_at||'').localeCompare(a.created_at||''); });
     var html = '<div class="timeline" style="padding:1.5rem 2rem;">';
-    versions.reverse().forEach(function(v) {
+    versions.forEach(function(v) {
       html += '<div class="timeline-item">';
       html += '<div class="tl-time">' + esc(v.created_at || '') + '</div>';
       html += '<div class="flex items-center justify-between">';
@@ -86,7 +90,7 @@ function loadVersions() {
       html += '</div>';
       html += '<div class="flex items-center gap-3">';
       html += '<span class="badge badge-neutral">' + (v.datapoints || 0) + ' pts</span>';
-      html += '<button class="btn btn-ghost btn-sm" onclick="rollbackVersion(\'' + esc(v.id) + '\')">Rollback</button>';
+      html += '<button class="btn btn-ghost btn-sm" onclick="rollbackVersion(\'' + esc(v.id) + '\',\'' + esc(v.tag || v.id) + '\')">Rollback</button>';
       html += '</div></div></div>';
     });
     html += '</div>';
@@ -114,10 +118,10 @@ function createVersion(e) {
   return false;
 }
 
-function rollbackVersion(id) {
-  if (!confirm('Rollback to version ' + id + '? This will restore dataset state.')) return;
-  apiCall('POST', '/api/dataset/versions/' + id + '/rollback', {}).then(function(d) {
-    showToast('Rolled back to ' + id, 'success');
+function rollbackVersion(id, tag) {
+  if (!confirm('Rollback dataset to version ' + tag + '?')) return;
+  apiCall('POST', '/api/dataset/versions/' + id + '/rollback', {}).then(function() {
+    showToast('Rolled back to ' + tag, 'success');
     loadVersions();
   }).catch(function(err) {
     showToast('Rollback failed: ' + err.message, 'error');
@@ -132,6 +136,7 @@ function diffVersions(e) {
   var to = document.getElementById('diff-to').value;
   apiCall('GET', '/api/dataset/versions/' + from + '/diff/' + to).then(function(d) {
     document.getElementById('diff-result').classList.remove('hidden');
+    document.getElementById('diff-result').scrollIntoView({behavior:'smooth'});
     document.getElementById('diff-output').textContent = JSON.stringify(d, null, 2);
   }).catch(function(err) {
     showToast('Diff failed: ' + err.message, 'error');

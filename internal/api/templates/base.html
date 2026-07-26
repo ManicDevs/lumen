@@ -93,6 +93,21 @@
         </div>
       </div>
       <div class="header-actions">
+        <div class="relative">
+          <input type="text" class="form-input" id="global-search" placeholder="Search... (Ctrl+K)" style="width:200px;padding-left:2rem;font-size:0.8125rem;" onfocus="document.getElementById('search-results').classList.remove('hidden')" onblur="setTimeout(function(){document.getElementById('search-results').classList.add('hidden')},200)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" style="position:absolute;left:0.625rem;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <div id="search-results" class="hidden" style="position:absolute;top:100%;left:0;right:0;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);margin-top:4px;max-height:300px;overflow-y:auto;z-index:50;">
+            <a href="/dashboard" class="nav-item" style="border-radius:0;">Dashboard</a>
+            <a href="/datasets" class="nav-item" style="border-radius:0;">Datasets</a>
+            <a href="/generate" class="nav-item" style="border-radius:0;">Generate</a>
+            <a href="/models" class="nav-item" style="border-radius:0;">Models</a>
+            <a href="/eval" class="nav-item" style="border-radius:0;">Evaluation</a>
+            <a href="/train" class="nav-item" style="border-radius:0;">Train</a>
+            <a href="/prompts" class="nav-item" style="border-radius:0;">Prompts</a>
+            <a href="/git" class="nav-item" style="border-radius:0;">Git</a>
+            <a href="/versions" class="nav-item" style="border-radius:0;">Versions</a>
+          </div>
+        </div>
         <a href="/metrics" class="btn btn-ghost btn-sm" target="_blank">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
           Metrics
@@ -158,6 +173,17 @@ function scoreClass(score) {
   if (score >= 0.5) return 'medium';
   return 'low';
 }
+
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    document.getElementById('global-search').focus();
+  }
+  if (e.key === 'Escape') {
+    document.getElementById('global-search').blur();
+    document.getElementById('search-results').classList.add('hidden');
+  }
+});
 </script>
 </body>
 </html>{{end}}

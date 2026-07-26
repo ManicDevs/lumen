@@ -108,10 +108,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *Server {
 
 	// API routes
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
+	mux.HandleFunc("GET /api/stats", s.handleStats)
 	mux.HandleFunc("GET /api/prompts", s.handleListPrompts)
 	mux.HandleFunc("POST /api/prompts/render", s.handleRenderPrompt)
 	mux.HandleFunc("POST /api/git/commit", s.handleGitCommit)
 	mux.HandleFunc("GET /api/git/status", s.handleGitStatus)
+	mux.HandleFunc("GET /api/evals", s.handleListEvals)
 
 	// Dataset versioning routes
 	mux.HandleFunc("GET /api/dataset/versions", s.handleListVersions)
@@ -765,6 +767,108 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "# HELP lumen_version Lumen version\n")
 	fmt.Fprintf(w, "# TYPE lumen_version gauge\n")
 	fmt.Fprintf(w, "lumen_version{version=\"%s\"} 1\n", version.Version)
+}
+
+// handleStats returns dashboard data as JSON.
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	commitsDir := filepath.Join(dataset.DatasetRoot, "commits")
+	freshPaths, _ := filepath.Glob(filepath.Join(commitsDir, "commit_*.json"))
+	trainedDir := filepath.Join(commitsDir, "trained")
+	archivedPaths, _ := filepath.Glob(filepath.Join(trainedDir, "commit_*.json"))
+
+	var totalCommits int
+	var totalDatapoints int
+	var latestCommit map[string]any
+	latestTime := time.Time{}
+
+	for _, p := range append(freshPaths, archivedPaths...) {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var commit dataset.Commit
+		if json.Unmarshal(data, &commit) != nil {
+			continue
+		}
+		totalCommits++
+		totalDatapoints += len(commit.Datapoints)
+		ts, _ := time.Parse(time.RFC3339, commit.Timestamp)
+		if ts.After(latestTime) {
+			latestTime = ts
+			latestCommit = map[string]any{
+				"commit_id":  commit.CommitID,
+				"timestamp":  commit.Timestamp,
+				"model":      commit.Model,
+				"datapoints": len(commit.Datapoints),
+			}
+		}
+	}
+
+	// Count models.
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	modelResp, _ := client.List(ctx)
+	modelCount := len(modelResp.Models)
+
+	// System health.
+	ctx2, cancel2 := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel2()
+	ollamaOK := true
+	req, err := http.NewRequestWithContext(ctx2, http.MethodGet, s.cfg.OllamaHost+"/api/tags", nil)
+	if err == nil {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			ollamaOK = false
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+	} else {
+		ollamaOK = false
+	}
+
+	uptime := time.Since(s.startedAt).Truncate(time.Second).String()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"total_commits":    totalCommits,
+		"total_datapoints": totalDatapoints,
+		"model_count":      modelCount,
+		"requests_total":   metricsRequestsTotal.Load(),
+		"errors_total":     metricsErrorsTotal.Load(),
+		"git_commits":      metricsGitCommits.Load(),
+		"eval_runs":        metricsEvalRuns.Load(),
+		"ollama_ok":        ollamaOK,
+		"disk_ok":          true,
+		"dataset_ok":       true,
+		"version":          version.Version,
+		"uptime":           uptime,
+		"latest_commit":    latestCommit,
+	})
+}
+
+// handleListEvals returns all evaluation results as JSON.
+func (s *Server) handleListEvals(w http.ResponseWriter, r *http.Request) {
+	evalMu.RLock()
+	defer evalMu.RUnlock()
+
+	evals := make([]map[string]any, 0, len(evalStore))
+	for id, result := range evalStore {
+		evals = append(evals, map[string]any{
+			"id":         id,
+			"model_a":    result.ModelA,
+			"model_b":    result.ModelB,
+			"status":     result.Status,
+			"started_at": result.StartedAt,
+			"results":    result.Results,
+		})
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"total": len(evals),
+		"evals": evals,
+	})
 }
 
 func (s *Server) handleListPrompts(w http.ResponseWriter, r *http.Request) {

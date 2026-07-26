@@ -1110,3 +1110,52 @@ code, pre, .mono { font-family: var(--font-mono); }
   .main-content { margin-left: 0 !important; }
   .page-content { padding: 0; }
 }
+
+/* ============================================================
+   Search Results Dropdown
+   ============================================================ */
+
+#search-results .nav-item {
+  border-radius: 0;
+  padding: 0.5rem 1rem;
+}
+
+#search-results .nav-item:hover {
+  background: var(--brand-50);
+  color: var(--brand-700);
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stat-card, .card {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* ============================================================
+   Scrollbar Styling
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--slate-300);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--slate-400);
+}

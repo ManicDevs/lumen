@@ -1,4 +1,6 @@
 {{define "content"}}
+<p class="text-sm text-secondary mb-6">Create training data from source code using Ollama models.</p>
+
 <div class="tabs mb-6">
   <a href="/datasets" class="tab">Commits</a>
   <a href="/generate" class="tab active">Generate</a>
@@ -13,19 +15,17 @@
         <div class="form-group">
           <label class="form-label">Target Path <span class="text-muted">(optional)</span></label>
           <input type="text" class="form-input" id="gen-path" placeholder="/path/to/source/code">
-          <div class="form-hint">Source code path to harvest from</div>
+          <div class="form-hint">Source code directory to harvest from</div>
         </div>
         <div class="form-group">
           <label class="form-label">Topic <span class="text-muted">(optional)</span></label>
           <input type="text" class="form-input" id="gen-topic" placeholder="Go concurrency patterns">
+          <div class="form-hint">Specific topic to generate data about</div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Model</label>
-            <select class="form-select" id="gen-model">
-              <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
-              <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
-            </select>
+            <select class="form-select" id="gen-model"></select>
           </div>
           <div class="form-group">
             <label class="form-label">Mode</label>
@@ -46,7 +46,8 @@
       <form id="batch-form" onsubmit="return runBatch(event)">
         <div class="form-group">
           <label class="form-label">Topics <span class="text-muted">(one per line)</span></label>
-          <textarea class="form-textarea" id="batch-topics" rows="5" placeholder="SQL injection prevention&#10;Concurrent goroutine patterns&#10;HTTP middleware design"></textarea>
+          <textarea class="form-textarea" id="batch-topics" rows="5" placeholder="SQL injection prevention&#10;Concurrent goroutine patterns&#10;HTTP middleware design" required></textarea>
+          <div class="form-hint" id="batch-count">0 topics</div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -64,12 +65,9 @@
         </div>
         <div class="form-group">
           <label class="form-label">Model</label>
-          <select class="form-select" id="batch-model">
-            <option value="qwen2.5-coder:3b">qwen2.5-coder:3b</option>
-            <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
-          </select>
+          <select class="form-select" id="batch-model"></select>
         </div>
-        <button type="submit" class="btn btn-primary w-full" id="batch-btn">Run Batch</button>
+        <button type="submit" class="btn btn-primary w-full" id="batch-btn">Run Batch Generation</button>
       </form>
     </div>
   </div>
@@ -78,7 +76,12 @@
 <div class="card mt-6 hidden" id="gen-result">
   <div class="card-header">
     <h3>Result</h3>
-    <span class="badge badge-success" id="gen-status">Completed</span>
+    <div class="flex items-center gap-2">
+      <span class="badge badge-success" id="gen-status">Completed</span>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gen-result').classList.add('hidden')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
   </div>
   <div class="card-body">
     <div class="code-block" id="gen-output"></div>
@@ -86,6 +89,26 @@
 </div>
 
 <script>
+function loadModels() {
+  return fetch('/api/models').then(function(r){return r.json();}).then(function(d) {
+    var models = d.models || [];
+    var sels = ['gen-model','batch-model'];
+    sels.forEach(function(id) {
+      var sel = document.getElementById(id);
+      sel.innerHTML = '';
+      models.forEach(function(m) {
+        var name = m.name || m.model;
+        sel.innerHTML += '<option value="' + esc(name) + '">' + esc(name) + '</option>';
+      });
+    });
+  });
+}
+
+document.getElementById('batch-topics').addEventListener('input', function() {
+  var lines = this.value.trim().split('\n').filter(function(l){return l.trim();});
+  document.getElementById('batch-count').textContent = lines.length + ' topic' + (lines.length !== 1 ? 's' : '');
+});
+
 function runGenerate(e) {
   e.preventDefault();
   var btn = document.getElementById('gen-btn');
@@ -113,8 +136,9 @@ function runGenerate(e) {
 function runBatch(e) {
   e.preventDefault();
   var btn = document.getElementById('batch-btn');
-  setLoading(btn, true);
   var topics = document.getElementById('batch-topics').value.trim().split('\n').filter(function(t){return t.trim();});
+  if (topics.length === 0) { showToast('Enter at least one topic', 'error'); return false; }
+  setLoading(btn, true);
   var jobs = topics.map(function(t) {
     return {
       topic: t.trim(),
@@ -126,11 +150,13 @@ function runBatch(e) {
   apiCall('POST', '/api/datasets/batch', { jobs: jobs, parallel: parseInt(document.getElementById('batch-parallel').value) }).then(function(d) {
     document.getElementById('gen-result').classList.remove('hidden');
     document.getElementById('gen-output').textContent = JSON.stringify(d, null, 2);
-    showToast('Batch generation completed', 'success');
+    showToast('Batch generation completed (' + topics.length + ' jobs)', 'success');
   }).catch(function(err) {
     showToast('Batch failed: ' + err.message, 'error');
   }).finally(function() { setLoading(btn, false); });
   return false;
 }
+
+loadModels();
 </script>
 {{end}}

@@ -5,31 +5,32 @@
   <div class="card">
     <div class="card-header">
       <h3>Repository Status</h3>
-      <button class="btn btn-ghost btn-sm" onclick="loadGitStatus()">Refresh</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadGitStatus()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
     </div>
     <div class="card-body">
-      <div id="git-status-content">
-        <div class="flex items-center gap-3 mb-6">
-          <span class="status-dot {{if .IsRepo}}green{{else}}red{{end}}"></span>
-          <span class="text-sm font-semibold">{{if .IsRepo}}Initialized{{else}}Not a Git repository{{end}}</span>
-        </div>
-        {{if .IsRepo}}
-        <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:0;">
-          <div class="stat-card" style="padding:1rem;">
-            <div class="stat-value" style="font-size:1.25rem;">{{.Staged}}</div>
-            <div class="stat-label">Staged</div>
-          </div>
-          <div class="stat-card" style="padding:1rem;">
-            <div class="stat-value" style="font-size:1.25rem;">{{.Modified}}</div>
-            <div class="stat-label">Modified</div>
-          </div>
-          <div class="stat-card" style="padding:1rem;">
-            <div class="stat-value" style="font-size:1.25rem;">{{.Untracked}}</div>
-            <div class="stat-label">Untracked</div>
-          </div>
-        </div>
-        {{end}}
+      <div class="flex items-center gap-3 mb-6">
+        <span class="status-dot {{if .IsRepo}}green{{else}}red{{end}}"></span>
+        <span class="text-sm font-semibold">{{if .IsRepo}}Repository Initialized{{else}}Not a Git repository{{end}}</span>
       </div>
+      {{if .IsRepo}}
+      <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:0;">
+        <div class="stat-card" style="padding:0.75rem;">
+          <div class="stat-value" style="font-size:1.25rem;" id="git-staged">{{.Staged}}</div>
+          <div class="stat-label">Staged</div>
+        </div>
+        <div class="stat-card" style="padding:0.75rem;">
+          <div class="stat-value" style="font-size:1.25rem;" id="git-modified">{{.Modified}}</div>
+          <div class="stat-label">Modified</div>
+        </div>
+        <div class="stat-card" style="padding:0.75rem;">
+          <div class="stat-value" style="font-size:1.25rem;" id="git-untracked">{{.Untracked}}</div>
+          <div class="stat-label">Untracked</div>
+        </div>
+      </div>
+      {{end}}
     </div>
   </div>
 
@@ -40,7 +41,8 @@
       <form id="commit-form" onsubmit="return gitCommit(event)">
         <div class="form-group">
           <label class="form-label">Commit Message</label>
-          <textarea class="form-textarea" id="commit-msg" rows="3" placeholder="feat(dataset): add new training data"></textarea>
+          <textarea class="form-textarea" id="commit-msg" rows="3" placeholder="feat(dataset): add new training data" required></textarea>
+          <div class="form-hint">Follow conventional commit format: type(scope): description</div>
         </div>
         <button type="submit" class="btn btn-primary w-full" id="commit-btn">Commit Dataset</button>
       </form>
@@ -50,7 +52,9 @@
       </div>
       {{else}}
       <div class="empty-state" style="padding:2rem;">
-        <p class="text-muted text-sm">Initialize git in the dataset directory first.</p>
+        <div class="empty-icon">&#x1f500;</div>
+        <h3>Not a Git Repository</h3>
+        <p class="text-sm text-muted">Initialize git in the dataset directory to start versioning.</p>
       </div>
       {{end}}
     </div>
@@ -63,9 +67,14 @@
     <span class="badge badge-success">Success</span>
   </div>
   <div class="card-body">
-    <div class="flex items-center gap-3">
-      <span class="text-sm text-muted">SHA:</span>
-      <span class="font-mono text-sm" id="commit-sha"></span>
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center gap-3">
+        <span class="text-sm text-muted">SHA:</span>
+        <span class="font-mono text-sm" id="commit-sha"></span>
+        <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('commit-sha').textContent);showToast('Copied','info')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -74,15 +83,16 @@
 function gitCommit(e) {
   e.preventDefault();
   var btn = document.getElementById('commit-btn');
+  var msg = document.getElementById('commit-msg').value.trim();
+  if (!msg) { showToast('Enter a commit message', 'error'); return false; }
   setLoading(btn, true);
 
-  apiCall('POST', '/api/git/commit', {
-    message: document.getElementById('commit-msg').value
-  }).then(function(d) {
+  apiCall('POST', '/api/git/commit', { message: msg }).then(function(d) {
     document.getElementById('commit-result').classList.remove('hidden');
     document.getElementById('commit-sha').textContent = d.sha || '';
     showToast('Committed: ' + (d.sha || '').substring(0, 8), 'success');
-    setTimeout(function() { location.reload(); }, 2000);
+    document.getElementById('commit-msg').value = '';
+    setTimeout(loadGitStatus, 500);
   }).catch(function(err) {
     showToast('Commit failed: ' + err.message, 'error');
   }).finally(function() { setLoading(btn, false); });
@@ -90,13 +100,10 @@ function gitCommit(e) {
 }
 
 function loadGitStatus() {
-  apiCall('GET', '/api/git/status').then(function(d) {
-    var cards = document.querySelectorAll('#git-status-content .stat-value');
-    if (cards.length >= 3) {
-      cards[0].textContent = d.staged || 0;
-      cards[1].textContent = d.modified || 0;
-      cards[2].textContent = d.untracked || 0;
-    }
+  fetch('/api/git/status').then(function(r){return r.json();}).then(function(d) {
+    document.getElementById('git-staged').textContent = d.staged || 0;
+    document.getElementById('git-modified').textContent = d.modified || 0;
+    document.getElementById('git-untracked').textContent = d.untracked || 0;
   });
 }
 </script>

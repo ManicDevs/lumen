@@ -9,11 +9,11 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Model A (Tuned)</label>
-            <input type="text" class="form-input" id="eval-model-a" placeholder="lumen-tuned">
+            <select class="form-select" id="eval-model-a"></select>
           </div>
           <div class="form-group">
             <label class="form-label">Model B (Base)</label>
-            <input type="text" class="form-input" id="eval-model-b" placeholder="qwen2.5-coder:3b">
+            <select class="form-select" id="eval-model-b"></select>
           </div>
         </div>
         <div class="form-group">
@@ -28,7 +28,10 @@
   <div class="card">
     <div class="card-header">
       <h3>Recent Evaluations</h3>
-      <button class="btn btn-ghost btn-sm" onclick="loadEvals()">Refresh</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadEvals()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
     </div>
     <div class="card-body" style="padding:0;" id="evals-list">
       <div class="loading"><span class="spinner"></span> Loading...</div>
@@ -39,13 +42,33 @@
 <div class="card hidden" id="eval-detail">
   <div class="card-header">
     <h3 id="eval-detail-title">Evaluation Results</h3>
-    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('eval-detail').classList.add('hidden')">Close</button>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('eval-detail').classList.add('hidden')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      Close
+    </button>
   </div>
   <div class="card-body" style="padding:0;" id="eval-detail-body"></div>
 </div>
 
 <script>
-var evalPolling = null;
+function loadModels() {
+  return fetch('/api/models').then(function(r){return r.json();}).then(function(d) {
+    var models = d.models || [];
+    var selA = document.getElementById('eval-model-a');
+    var selB = document.getElementById('eval-model-b');
+    selA.innerHTML = '';
+    selB.innerHTML = '';
+    models.forEach(function(m) {
+      var name = m.name || m.model;
+      selA.innerHTML += '<option value="' + esc(name) + '">' + esc(name) + '</option>';
+      selB.innerHTML += '<option value="' + esc(name) + '">' + esc(name) + '</option>';
+    });
+    if (models.length > 1) {
+      selB.selectedIndex = 1;
+    }
+    return models;
+  });
+}
 
 function runEval(e) {
   e.preventDefault();
@@ -59,7 +82,7 @@ function runEval(e) {
     prompts: prompts.length ? prompts : undefined
   }).then(function(d) {
     showToast('Evaluation started: ' + d.eval_id, 'info');
-    loadEvals();
+    setTimeout(loadEvals, 1000);
   }).catch(function(err) {
     showToast('Eval failed: ' + err.message, 'error');
   }).finally(function() { setLoading(btn, false); });
@@ -70,47 +93,85 @@ function loadEvals() {
   var el = document.getElementById('evals-list');
   el.innerHTML = '<div class="loading"><span class="spinner"></span> Loading...</div>';
 
-  apiCall('GET', '/api/metrics').then(function(text) {
-    var evalCount = 0;
-    text.split('\n').forEach(function(l) {
-      if (l.indexOf('lumen_eval_runs_total') === 0 && l[0] === 'l') {
-        evalCount = parseInt(l.split(' ')[1]) || 0;
-      }
+  fetch('/api/evals').then(function(r){return r.json();}).then(function(d) {
+    var evals = d.evals || [];
+    if (evals.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:2rem;"><div class="empty-icon">&#x1f9ea;</div><h3>No evaluations yet</h3><p class="text-sm text-muted">Run an evaluation to compare models.</p></div>';
+      return;
+    }
+    evals.sort(function(a,b) { return (b.started_at||'').localeCompare(a.started_at||''); });
+    var html = '<table class="table"><thead><tr><th>ID</th><th>Model A</th><th>Model B</th><th>Status</th><th></th></tr></thead><tbody>';
+    evals.forEach(function(ev) {
+      var statusCls = ev.status === 'completed' ? 'badge-success' : 'badge-info';
+      html += '<tr>';
+      html += '<td class="cell-mono text-sm">' + esc(ev.id.substring(0,16)) + '</td>';
+      html += '<td class="text-sm">' + esc(ev.model_a) + '</td>';
+      html += '<td class="text-sm">' + esc(ev.model_b) + '</td>';
+      html += '<td><span class="badge ' + statusCls + '">' + esc(ev.status) + '</span></td>';
+      html += '<td><button class="btn btn-ghost btn-sm" onclick="showEvalDetail(\'' + esc(ev.id) + '\')">View</button></td>';
+      html += '</tr>';
     });
-    return evalCount;
-  }).catch(function() { return 0; });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  }).catch(function() {
+    el.innerHTML = '<div class="alert alert-error">Failed to load evaluations</div>';
+  });
 }
 
 function showEvalDetail(id) {
-  apiCall('GET', '/api/models/eval/' + id).then(function(d) {
+  fetch('/api/models/eval/' + id).then(function(r){
+    if (!r.ok) throw new Error('Not found');
+    return r.json();
+  }).then(function(d) {
     var detail = document.getElementById('eval-detail');
     detail.classList.remove('hidden');
-    document.getElementById('eval-detail-title').textContent = 'Eval: ' + d.model_a + ' vs ' + d.model_b;
+    detail.scrollIntoView({behavior:'smooth', block:'start'});
+    document.getElementById('eval-detail-title').textContent = esc(d.model_a) + ' vs ' + esc(d.model_b);
 
-    var html = '<div class="table-wrap"><table class="table"><thead><tr><th>Prompt</th><th>' + esc(d.model_a) + ' Score</th><th>' + esc(d.model_b) + ' Score</th><th>Latency A</th><th>Latency B</th></tr></thead><tbody>';
-    (d.results || []).forEach(function(r) {
-      html += '<tr>';
-      html += '<td class="text-sm" style="max-width:200px;">' + esc(r.prompt) + '</td>';
-      html += '<td><span class="font-mono">' + r.score_a.toFixed(2) + '</span> <span class="score-bar"><span class="score-bar-fill ' + scoreClass(r.score_a) + '" style="width:' + Math.min(100, r.score_a * 25) + '%"></span></span></td>';
-      html += '<td><span class="font-mono">' + r.score_b.toFixed(2) + '</span> <span class="score-bar"><span class="score-bar-fill ' + scoreClass(r.score_b) + '" style="width:' + Math.min(100, r.score_b * 25) + '%"></span></span></td>';
-      html += '<td class="text-sm font-mono">' + r.latency_a_ms + 'ms</td>';
-      html += '<td class="text-sm font-mono">' + r.latency_b_ms + 'ms</td>';
-      html += '</tr>';
+    var results = d.results || [];
+    if (results.length === 0) {
+      document.getElementById('eval-detail-body').innerHTML = '<div class="empty-state"><p class="text-muted">Evaluation still running or no results.</p></div>';
+      return;
+    }
+
+    var avgA = 0, avgB = 0;
+    results.forEach(function(r){ avgA += r.score_a; avgB += r.score_b; });
+    avgA = results.length ? (avgA / results.length).toFixed(2) : '0';
+    avgB = results.length ? (avgB / results.length).toFixed(2) : '0';
+
+    var html = '<div style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);background:var(--slate-50);" class="flex items-center justify-between">';
+    html += '<div class="flex items-center gap-4">';
+    html += '<div class="text-sm"><span class="text-muted">Avg Score A:</span> <span class="font-mono font-semibold">' + avgA + '</span> <span class="score-bar"><span class="score-bar-fill ' + scoreClass(parseFloat(avgA)) + '" style="width:' + Math.min(100, parseFloat(avgA)*25) + '%"></span></span></div>';
+    html += '<div class="text-sm"><span class="text-muted">Avg Score B:</span> <span class="font-mono font-semibold">' + avgB + '</span> <span class="score-bar"><span class="score-bar-fill ' + scoreClass(parseFloat(avgB)) + '" style="width:' + Math.min(100, parseFloat(avgB)*25) + '%"></span></span></div>';
+    html += '<div class="text-sm"><span class="text-muted">Prompts:</span> <span class="font-semibold">' + results.length + '</span></div>';
+    html += '</div></div>';
+
+    results.forEach(function(r, i) {
+      html += '<div style="border-bottom:1px solid var(--border-color);' + (i===results.length-1?'border-bottom:none;':'') + '">';
+      html += '<div style="padding:0.75rem 1.5rem;background:var(--slate-50);border-bottom:1px solid var(--border-color);" class="flex items-center justify-between">';
+      html += '<span class="text-sm font-semibold" style="max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(r.prompt) + '</span>';
+      html += '<div class="flex items-center gap-3">';
+      html += '<span class="text-xs font-mono">A: ' + r.score_a.toFixed(2) + '</span>';
+      html += '<span class="score-bar" style="width:60px;"><span class="score-bar-fill ' + scoreClass(r.score_a) + '" style="width:' + Math.min(100, r.score_a*25) + '%"></span></span>';
+      html += '<span class="text-xs font-mono">B: ' + r.score_b.toFixed(2) + '</span>';
+      html += '<span class="score-bar" style="width:60px;"><span class="score-bar-fill ' + scoreClass(r.score_b) + '" style="width:' + Math.min(100, r.score_b*25) + '%"></span></span>';
+      html += '<span class="text-xs text-muted">' + r.latency_a_ms + 'ms / ' + r.latency_b_ms + 'ms</span>';
+      html += '</div></div>';
       if (r.response_a || r.response_b) {
-        html += '<tr><td colspan="5" style="padding:0;">';
-        html += '<div class="compare-grid" style="margin:0.5rem 1rem;">';
-        html += '<div class="compare-col"><div class="compare-col-header">' + esc(d.model_a) + '</div><div class="compare-col-body">' + esc(r.response_a || '') + '</div></div>';
-        html += '<div class="compare-col"><div class="compare-col-header">' + esc(d.model_b) + '</div><div class="compare-col-body">' + esc(r.response_b || '') + '</div></div>';
-        html += '</div></td></tr>';
+        html += '<div class="compare-grid" style="margin:0.75rem 1.5rem;">';
+        html += '<div class="compare-col"><div class="compare-col-header">' + esc(d.model_a) + ' <span class="text-muted font-normal">' + r.latency_a_ms + 'ms</span></div><div class="compare-col-body">' + esc(r.response_a || '(no response)') + '</div></div>';
+        html += '<div class="compare-col"><div class="compare-col-header">' + esc(d.model_b) + ' <span class="text-muted font-normal">' + r.latency_b_ms + 'ms</span></div><div class="compare-col-body">' + esc(r.response_b || '(no response)') + '</div></div>';
+        html += '</div>';
       }
+      html += '</div>';
     });
-    html += '</tbody></table></div>';
     document.getElementById('eval-detail-body').innerHTML = html;
   }).catch(function(err) {
     showToast('Failed to load eval: ' + err.message, 'error');
   });
 }
 
+loadModels();
 loadEvals();
 </script>
 {{end}}

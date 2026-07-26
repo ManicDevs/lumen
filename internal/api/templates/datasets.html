@@ -1,7 +1,8 @@
 {{define "content"}}
 <div class="flex items-center justify-between mb-6">
-  <div>
-    <p class="text-sm text-secondary">Track and manage your dataset commits, exports, and curation runs.</p>
+  <p class="text-sm text-secondary">Track and manage your dataset commits, exports, and curation runs.</p>
+  <div class="flex items-center gap-3">
+    <input type="text" class="form-input" id="ds-search" placeholder="Search commits..." style="width:250px;" oninput="filterDatasets()">
   </div>
 </div>
 
@@ -14,40 +15,102 @@
 <div class="card">
   <div class="card-header">
     <h3>Dataset Commits</h3>
-    <span class="badge badge-neutral">{{.TotalCommits}} total</span>
+    <div class="flex items-center gap-3">
+      <span class="badge badge-neutral" id="ds-count">0 total</span>
+      <button class="btn btn-ghost btn-sm" onclick="exportDatasets()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+    </div>
   </div>
-  <div class="card-body" style="padding:0;">
-    {{if .Commits}}
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Commit ID</th>
-            <th>Timestamp</th>
-            <th>Model</th>
-            <th class="cell-right">Datapoints</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{range .Commits}}
-          <tr>
-            <td class="cell-mono text-sm">{{shortID .CommitID}}</td>
-            <td class="text-sm text-secondary">{{.Timestamp}}</td>
-            <td><span class="badge badge-brand">{{.Model}}</span></td>
-            <td class="cell-right font-semibold">{{.Datapoints}}</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{else}}
-    <div class="empty-state">
-      <div class="empty-icon">&#x1f4e6;</div>
-      <h3>No dataset commits</h3>
-      <p>Generate a dataset to see commits here.</p>
-      <a href="/generate" class="btn btn-primary">Generate Dataset</a>
-    </div>
-    {{end}}
+  <div class="card-body" style="padding:0;" id="ds-body">
+    <div class="loading"><span class="spinner"></span> Loading...</div>
   </div>
 </div>
+
+<script>
+var allCommits = [];
+
+function loadDatasets() {
+  fetch('/api/datasets').then(function(r){return r.json();}).then(function(d) {
+    allCommits = (d.commits || []).slice().sort(function(a,b) {
+      return (b.timestamp||'').localeCompare(a.timestamp||'');
+    });
+    renderDatasets(allCommits);
+    document.getElementById('ds-count').textContent = allCommits.length + ' total';
+  }).catch(function() {
+    document.getElementById('ds-body').innerHTML = '<div class="alert alert-error">Failed to load datasets</div>';
+  });
+}
+
+function filterDatasets() {
+  var q = document.getElementById('ds-search').value.toLowerCase();
+  if (!q) { renderDatasets(allCommits); return; }
+  var filtered = allCommits.filter(function(c) {
+    return (c.commit_id||'').toLowerCase().indexOf(q) >= 0 ||
+           (c.model||'').toLowerCase().indexOf(q) >= 0 ||
+           (c.timestamp||'').toLowerCase().indexOf(q) >= 0;
+  });
+  renderDatasets(filtered);
+}
+
+function renderDatasets(commits) {
+  var el = document.getElementById('ds-body');
+  if (!commits || commits.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">&#x1f4e6;</div><h3>No dataset commits</h3><p>Generate a dataset to see commits here.</p><a href="/generate" class="btn btn-primary">Generate Dataset</a></div>';
+    return;
+  }
+  var totalPts = 0;
+  commits.forEach(function(c){ totalPts += (c.datapoints || c.Datapoints || 0); });
+  var html = '<div class="table-wrap"><table class="table"><thead><tr>';
+  html += '<th style="cursor:pointer;" onclick="sortDS(\'id\')">Commit ID <span id="sort-id"></span></th>';
+  html += '<th style="cursor:pointer;" onclick="sortDS(\'time\')">Timestamp <span id="sort-time"></span></th>';
+  html += '<th style="cursor:pointer;" onclick="sortDS(\'model\')">Model <span id="sort-model"></span></th>';
+  html += '<th class="cell-right" style="cursor:pointer;" onclick="sortDS(\'pts\')">Datapoints <span id="sort-pts"></span></th>';
+  html += '</tr></thead><tbody>';
+  commits.forEach(function(c) {
+    var id = c.commit_id || c.CommitID || '';
+    html += '<tr>';
+    html += '<td class="cell-mono text-sm" title="' + esc(id) + '">' + esc(id.substring(0,16)) + '...</td>';
+    html += '<td class="text-sm text-secondary">' + (c.timestamp || '').replace('T',' ').substring(0,19) + '</td>';
+    html += '<td><span class="badge badge-brand">' + esc(c.model || c.Model || '') + '</span></td>';
+    html += '<td class="cell-right font-semibold">' + (c.datapoints || c.Datapoints || 0) + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="padding:0.75rem 1rem;border-top:1px solid var(--border-color);background:var(--slate-50);font-size:0.8125rem;color:var(--text-secondary);">' + commits.length + ' commits &middot; ' + totalPts + ' total datapoints</div>';
+  el.innerHTML = html;
+}
+
+var dsSortField = 'time';
+var dsSortAsc = false;
+
+function sortDS(field) {
+  if (dsSortField === field) { dsSortAsc = !dsSortAsc; } else { dsSortField = field; dsSortAsc = false; }
+  var q = document.getElementById('ds-search').value.toLowerCase();
+  var list = q ? allCommits.filter(function(c) { return (c.commit_id||'').toLowerCase().indexOf(q)>=0||(c.model||'').toLowerCase().indexOf(q)>=0; }) : allCommits.slice();
+  list.sort(function(a,b) {
+    var va, vb;
+    if (field === 'id') { va = a.commit_id||''; vb = b.commit_id||''; }
+    else if (field === 'time') { va = a.timestamp||''; vb = b.timestamp||''; }
+    else if (field === 'model') { va = a.model||''; vb = b.model||''; }
+    else { va = a.datapoints||0; vb = b.datapoints||0; }
+    if (typeof va === 'number') return dsSortAsc ? va-vb : vb-va;
+    return dsSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+  renderDatasets(list);
+}
+
+function exportDatasets() {
+  var data = JSON.stringify(allCommits, null, 2);
+  var blob = new Blob([data], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'lumen-datasets.json'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Dataset exported', 'success');
+}
+
+loadDatasets();
+</script>
 {{end}}

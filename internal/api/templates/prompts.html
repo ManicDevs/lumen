@@ -3,19 +3,23 @@
 
 <div class="grid-2">
   <div class="card">
-    <div class="card-header"><h3>Available Templates</h3></div>
+    <div class="card-header">
+      <h3>Available Templates</h3>
+      <span class="badge badge-neutral">{{len .Templates}} templates</span>
+    </div>
     <div class="card-body" style="padding:0;">
       {{if .Templates}}
       <div class="table-wrap">
         <table class="table">
           <thead>
-            <tr><th>Name</th><th>Description</th></tr>
+            <tr><th>Name</th><th>Description</th><th></th></tr>
           </thead>
           <tbody>
             {{range .Templates}}
-            <tr>
+            <tr style="cursor:pointer;" onclick="selectTemplate('{{.Name}}')">
               <td><span class="badge badge-brand font-mono">{{.Name}}</span></td>
               <td class="text-sm text-secondary">{{.Description}}</td>
+              <td class="cell-right"><span class="text-xs text-muted">Click to use</span></td>
             </tr>
             {{end}}
           </tbody>
@@ -37,15 +41,18 @@
           <label class="form-label">Template</label>
           <select class="form-select" id="prompt-select">
             {{range .Templates}}
-            <option value="{{.Name}}">{{.Name}}</option>
+            <option value="{{.Name}}">{{.Name}} &mdash; {{.Description}}</option>
             {{end}}
           </select>
         </div>
         <div class="form-group">
           <label class="form-label">Code</label>
-          <textarea class="form-textarea" id="prompt-code" rows="8" placeholder="Paste your code here..."></textarea>
+          <textarea class="form-textarea" id="prompt-code" rows="10" placeholder="Paste your code here..." required></textarea>
         </div>
-        <button type="submit" class="btn btn-primary w-full" id="prompt-btn">Render Prompt</button>
+        <div class="flex items-center gap-3">
+          <button type="submit" class="btn btn-primary flex-1" id="prompt-btn">Render Prompt</button>
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('prompt-code').value='';document.getElementById('prompt-result').classList.add('hidden')">Clear</button>
+        </div>
       </form>
     </div>
   </div>
@@ -54,10 +61,13 @@
 <div class="card mt-6 hidden" id="prompt-result">
   <div class="card-header">
     <h3>Rendered Output</h3>
-    <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('prompt-output').textContent).then(function(){showToast('Copied','info')})">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      Copy
-    </button>
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-muted" id="prompt-chars"></span>
+      <button class="btn btn-ghost btn-sm" onclick="copyPrompt()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+    </div>
   </div>
   <div class="card-body">
     <div class="code-block" id="prompt-output" style="white-space:pre-wrap;"></div>
@@ -65,22 +75,39 @@
 </div>
 
 <script>
+function selectTemplate(name) {
+  document.getElementById('prompt-select').value = name;
+  document.getElementById('prompt-select').focus();
+}
+
 function renderPrompt(e) {
   e.preventDefault();
   var btn = document.getElementById('prompt-btn');
+  var code = document.getElementById('prompt-code').value.trim();
+  if (!code) { showToast('Enter some code to render', 'error'); return false; }
   setLoading(btn, true);
 
   apiCall('POST', '/api/prompts/render', {
     template: document.getElementById('prompt-select').value,
-    code: document.getElementById('prompt-code').value
+    code: code
   }).then(function(d) {
     document.getElementById('prompt-result').classList.remove('hidden');
-    document.getElementById('prompt-output').textContent = d.rendered || '';
+    document.getElementById('prompt-result').scrollIntoView({behavior:'smooth'});
+    var rendered = d.rendered || '';
+    document.getElementById('prompt-output').textContent = rendered;
+    document.getElementById('prompt-chars').textContent = rendered.length + ' characters';
     showToast('Prompt rendered', 'info');
   }).catch(function(err) {
     showToast('Render failed: ' + err.message, 'error');
   }).finally(function() { setLoading(btn, false); });
   return false;
+}
+
+function copyPrompt() {
+  var text = document.getElementById('prompt-output').textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Copied to clipboard', 'info');
+  });
 }
 </script>
 {{end}}

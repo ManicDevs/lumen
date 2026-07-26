@@ -2,11 +2,21 @@
 <p class="text-sm text-secondary mb-6">All models available on the connected Ollama instance.</p>
 
 <div class="flex items-center justify-between mb-6">
-  <div id="model-count" class="text-sm text-muted"></div>
-  <button class="btn btn-secondary btn-sm" onclick="loadModels()">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-    Refresh
-  </button>
+  <div class="flex items-center gap-3">
+    <input type="text" class="form-input" id="model-search" placeholder="Search models..." style="width:250px;" oninput="filterModels()">
+    <span class="text-sm text-muted" id="model-count"></span>
+  </div>
+  <div class="flex items-center gap-3">
+    <select class="form-select" id="model-sort" onchange="loadModels()" style="width:180px;">
+      <option value="name">Sort by Name</option>
+      <option value="size">Sort by Size</option>
+      <option value="modified">Sort by Modified</option>
+    </select>
+    <button class="btn btn-secondary btn-sm" onclick="loadModels()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
 </div>
 
 <div id="models-grid" class="grid-3">
@@ -14,36 +24,66 @@
 </div>
 
 <script>
+var allModels = [];
+
 function loadModels() {
   var el = document.getElementById('models-grid');
   el.innerHTML = '<div class="loading" style="grid-column:1/-1;"><span class="spinner"></span> Loading models...</div>';
-  apiCall('GET', '/api/models').then(function(d) {
-    var models = d.models || [];
-    document.getElementById('model-count').textContent = models.length + ' model' + (models.length !== 1 ? 's' : '');
-    if (models.length === 0) {
-      el.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">&#x1f4e6;</div><h3>No models found</h3><p>Pull a model from Ollama to get started.</p></div>';
-      return;
-    }
-    var html = '';
-    models.forEach(function(m) {
-      var details = m.details || {};
-      html += '<div class="card"><div class="card-body">';
-      html += '<div class="flex items-center justify-between mb-3">';
-      html += '<h3 class="text-sm font-semibold" style="word-break:break-all;">' + esc(m.name || m.model) + '</h3>';
-      html += '<span class="badge badge-brand">' + (details.parameter_size || '') + '</span>';
-      html += '</div>';
-      html += '<div class="flex flex-col gap-3">';
-      html += '<div class="flex justify-between text-sm"><span class="text-muted">Size</span><span class="font-mono">' + formatBytes(m.size) + '</span></div>';
-      if (details.family) html += '<div class="flex justify-between text-sm"><span class="text-muted">Family</span><span>' + esc(details.family) + '</span></div>';
-      if (details.quantization_level) html += '<div class="flex justify-between text-sm"><span class="text-muted">Quantization</span><span class="badge badge-neutral">' + esc(details.quantization_level) + '</span></div>';
-      if (m.modified_at) html += '<div class="flex justify-between text-sm"><span class="text-muted">Modified</span><span class="text-secondary">' + new Date(m.modified_at).toLocaleDateString() + '</span></div>';
-      html += '</div></div></div>';
-    });
-    el.innerHTML = html;
+  fetch('/api/models').then(function(r){return r.json();}).then(function(d) {
+    allModels = d.models || [];
+    sortAndRender();
   }).catch(function(err) {
     el.innerHTML = '<div class="alert alert-error" style="grid-column:1/-1;">Failed to load models: ' + esc(err.message) + '</div>';
   });
 }
+
+function sortAndRender() {
+  var sortBy = document.getElementById('model-sort').value;
+  var q = document.getElementById('model-search').value.toLowerCase();
+  var filtered = allModels.filter(function(m) {
+    if (!q) return true;
+    var name = (m.name || m.model || '').toLowerCase();
+    var family = ((m.details||{}).family || '').toLowerCase();
+    return name.indexOf(q) >= 0 || family.indexOf(q) >= 0;
+  });
+  filtered.sort(function(a,b) {
+    if (sortBy === 'size') return (b.size||0) - (a.size||0);
+    if (sortBy === 'modified') return (b.modified_at||'').localeCompare(a.modified_at||'');
+    return (a.name||'').localeCompare(b.name||'');
+  });
+  renderModels(filtered);
+}
+
+function filterModels() { sortAndRender(); }
+
+function renderModels(models) {
+  var el = document.getElementById('models-grid');
+  document.getElementById('model-count').textContent = models.length + ' model' + (models.length !== 1 ? 's' : '');
+  if (models.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><div class="empty-icon">&#x1f4e6;</div><h3>No models found</h3><p>Pull a model from Ollama to get started.</p></div>';
+    return;
+  }
+  var html = '';
+  models.forEach(function(m) {
+    var details = m.details || {};
+    html += '<div class="card"><div class="card-body">';
+    html += '<div class="flex items-center justify-between mb-3">';
+    html += '<h3 class="text-sm font-semibold" style="word-break:break-all;flex:1;margin-right:0.5rem;">' + esc(m.name || m.model) + '</h3>';
+    html += '<span class="badge badge-brand">' + (details.parameter_size || 'N/A') + '</span>';
+    html += '</div>';
+    html += '<div class="flex flex-col gap-2">';
+    html += '<div class="flex justify-between text-sm"><span class="text-muted">Size</span><span class="font-mono">' + formatBytes(m.size) + '</span></div>';
+    if (details.family) html += '<div class="flex justify-between text-sm"><span class="text-muted">Family</span><span>' + esc(details.family) + '</span></div>';
+    if (details.quantization_level) html += '<div class="flex justify-between text-sm"><span class="text-muted">Quantization</span><span class="badge badge-neutral">' + esc(details.quantization_level) + '</span></div>';
+    if (m.modified_at) {
+      var d = new Date(m.modified_at);
+      html += '<div class="flex justify-between text-sm"><span class="text-muted">Modified</span><span class="text-secondary">' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '</span></div>';
+    }
+    html += '</div></div></div>';
+  });
+  el.innerHTML = html;
+}
+
 loadModels();
 </script>
 {{end}}
