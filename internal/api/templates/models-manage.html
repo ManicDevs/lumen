@@ -1,0 +1,209 @@
+{{define "content"}}
+<p class="text-sm text-secondary mb-6">Manage Ollama models: pull new models, delete unused ones, tag versions, and copy models.</p>
+
+<div class="card mb-6">
+  <div class="card-header">
+    <h3>Pull New Model</h3>
+  </div>
+  <div class="card-body">
+    <div class="flex flex-col sm:flex-row gap-4">
+      <input type="text" class="form-input flex-1" id="pull-model-name" placeholder="e.g., llama3.2, codellama:7b, mistral:latest">
+      <button class="btn btn-brand" onclick="pullModel()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+        Pull Model
+      </button>
+      <span class="text-sm text-muted self-center">Names from <a href="https://ollama.com/library" target="_blank" class="text-brand hover:underline">Ollama Library</a></span>
+    </div>
+    <div id="pull-progress" class="hidden mt-4">
+      <div class="progress" style="height:8px;"><div class="progress-bar" id="pull-progress-bar" style="width:0%"></div></div>
+      <p class="text-sm text-muted mt-2" id="pull-status">Starting...</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header flex items-center justify-between">
+    <h3>Local Models</h3>
+    <button class="btn btn-secondary btn-sm" onclick="loadModels()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-container">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:35%">Name</th>
+            <th style="width:15%">Size</th>
+            <th style="width:12%">Family</th>
+            <th style="width:12%">Params</th>
+            <th style="width:14%">Modified</th>
+            <th style="width:12%">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="models-tbody">
+          <tr><td colspan="6" class="loading"><span class="spinner"></span> Loading models...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="tag-modal">
+  <div class="modal-overlay" onclick="closeModal('tag-modal')"></div>
+  <div class="modal-content">
+    <div class="modal-header"><h3>Tag Model</h3></div>
+    <div class="modal-body">
+      <input type="hidden" id="tag-source-model">
+      <div class="form-group"><label class="form-label">New Tag</label><input type="text" class="form-input" id="tag-name" placeholder="e.g., my-model:v1.0"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('tag-modal')">Cancel</button>
+      <button class="btn btn-brand" onclick="submitTag()">Create Tag</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="copy-modal">
+  <div class="modal-overlay" onclick="closeModal('copy-modal')"></div>
+  <div class="modal-content">
+    <div class="modal-header"><h3>Copy Model</h3></div>
+    <div class="modal-body">
+      <input type="hidden" id="copy-source-model">
+      <div class="form-group"><label class="form-label">Target Name</label><input type="text" class="form-input" id="copy-target-name" placeholder="e.g., my-model:backup"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('copy-modal')">Cancel</button>
+      <button class="btn btn-brand" onclick="submitCopy()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function loadModels() {
+  var tbody = document.getElementById('models-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="loading"><span class="spinner"></span> Loading models...</td></tr>';
+  fetch('/api/v1/models').then(function(r){return r.json();}).then(function(d) {
+    renderModels(d.models || []);
+  }).catch(function(err) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-error">Failed to load models: ' + esc(err.message) + '</td></tr>';
+  });
+}
+
+function renderModels(models) {
+  var tbody = document.getElementById('models-tbody');
+  if (models.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-8">No models found. Pull a model to get started.</td></tr>';
+    return;
+  }
+  var html = '';
+  models.forEach(function(m) {
+    var details = m.details || {};
+    html += '<tr>';
+    html += '<td><code class="text-sm">' + esc(m.name || m.model) + '</code></td>';
+    html += '<td class="font-mono text-sm">' + formatBytes(m.size) + '</td>';
+    html += '<td>' + esc(details.family || '-') + '</td>';
+    html += '<td>' + esc(details.parameter_size || '-') + '</td>';
+    html += '<td class="text-sm text-muted">' + (m.modified_at ? new Date(m.modified_at).toLocaleString() : '-') + '</td>';
+    html += '<td>';
+    html += '<div class="flex items-center gap-1">';
+    html += '<button class="btn btn-ghost btn-sm" onclick="openTagModal(\'' + esc(m.name || m.model) + '\')" title="Tag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></button>';
+    html += '<button class="btn btn-ghost btn-sm" onclick="openCopyModal(\'' + esc(m.name || m.model) + '\')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>';
+    html += '<button class="btn btn-ghost btn-sm text-error" onclick="deleteModel(\'' + esc(m.name || m.model) + '\')" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+    html += '</div></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function pullModel() {
+  var name = document.getElementById('pull-model-name').value.trim();
+  if (!name) { showToast('Enter a model name', 'error'); return; }
+  var progress = document.getElementById('pull-progress');
+  var bar = document.getElementById('pull-progress-bar');
+  var status = document.getElementById('pull-status');
+  progress.classList.remove('hidden');
+  bar.style.width = '0%';
+  status.textContent = 'Connecting to Ollama...';
+
+  fetch('/api/v1/models/pull', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name, stream: true })
+  }).then(function(r) {
+    var reader = r.body.getReader();
+    var decoder = new TextDecoder();
+    return reader.read().then(function process(result) {
+      if (result.done) return;
+      var chunk = decoder.decode(result.value);
+      var lines = chunk.split('\n');
+      lines.forEach(function(line) {
+        if (line.startsWith('data: ')) {
+          try {
+            var data = JSON.parse(line.slice(6));
+            if (data.status) status.textContent = data.status;
+            if (data.completed && data.total) {
+              var pct = Math.round((data.completed / data.total) * 100);
+              bar.style.width = pct + '%';
+            }
+          } catch(e) {}
+        }
+      });
+      return reader.read().then(process);
+    });
+  }).then(function() {
+    status.textContent = 'Complete!';
+    bar.style.width = '100%';
+    setTimeout(function() { progress.classList.add('hidden'); loadModels(); }, 1500);
+  }).catch(function(err) {
+    status.textContent = 'Error: ' + err.message;
+    status.style.color = 'var(--error-color)';
+  });
+}
+
+function deleteModel(name) {
+  if (!confirm('Delete model "' + name + '"? This cannot be undone.')) return;
+  fetch('/api/v1/models/' + encodeURIComponent(name), { method: 'DELETE' })
+    .then(function(r) { if (!r.ok) throw new Error('Delete failed'); showToast('Model deleted'); loadModels(); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+function openTagModal(source) {
+  document.getElementById('tag-source-model').value = source;
+  document.getElementById('tag-name').value = source + ':custom';
+  document.getElementById('tag-modal').classList.remove('hidden');
+}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function submitTag() {
+  var source = document.getElementById('tag-source-model').value;
+  var tag = document.getElementById('tag-name').value.trim();
+  if (!tag) { showToast('Enter a tag name', 'error'); return; }
+  fetch('/api/v1/models/tags', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: source, tag: tag })
+  }).then(function(r) { if (!r.ok) throw new Error('Tag failed'); showToast('Tag created'); closeModal('tag-modal'); loadModels(); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+function openCopyModal(source) {
+  document.getElementById('copy-source-model').value = source;
+  document.getElementById('copy-target-name').value = source + '-copy';
+  document.getElementById('copy-modal').classList.remove('hidden');
+}
+function submitCopy() {
+  var source = document.getElementById('copy-source-model').value;
+  var target = document.getElementById('copy-target-name').value.trim();
+  if (!target) { showToast('Enter target name', 'error'); return; }
+  fetch('/api/v1/models/copy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source: source, target: target })
+  }).then(function(r) { if (!r.ok) throw new Error('Copy failed'); showToast('Copied'); closeModal('copy-modal'); loadModels(); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+loadModels();
+</script>
+{{end}}

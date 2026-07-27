@@ -13,6 +13,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -105,6 +108,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *Server {
 	mux.HandleFunc("GET /prompts", s.handleUIPrompts)
 	mux.HandleFunc("GET /git", s.handleUIGit)
 	mux.HandleFunc("GET /versions", s.handleUIVersions)
+	mux.HandleFunc("GET /models-manage", s.handleUIModelsManage)
+	mux.HandleFunc("GET /training", s.handleUITrainingJobs)
+	mux.HandleFunc("GET /audit", s.handleUIAudit)
+	mux.HandleFunc("GET /webhooks", s.handleUIWebhooks)
+	mux.HandleFunc("GET /schedules", s.handleUISchedules)
+	mux.HandleFunc("GET /settings", s.handleUISettings)
 
 	// API routes
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
@@ -124,6 +133,63 @@ func NewServer(cfg *config.Config, logger *slog.Logger) *Server {
 	// Batch routes
 	mux.HandleFunc("POST /api/datasets/batch", s.handleBatchGenerate)
 	mux.HandleFunc("POST /api/models/eval/batch", s.handleBatchEval)
+
+	// Enterprise: Dataset management with pagination/filtering
+	mux.HandleFunc("GET /api/v1/datasets", s.handleListDatasetsV1)
+	mux.HandleFunc("GET /api/v1/datasets/{id}", s.handleGetDatasetV1)
+	mux.HandleFunc("DELETE /api/v1/datasets/{id}", s.handleDeleteDatasetV1)
+	mux.HandleFunc("POST /api/v1/datasets/export", s.handleExportDatasetV1)
+	mux.HandleFunc("POST /api/v1/datasets/import", s.handleImportDatasetV1)
+
+	// Enterprise: Model management
+	mux.HandleFunc("GET /api/v1/models", s.handleListModelsV1)
+	mux.HandleFunc("GET /api/v1/models/{name}", s.handleGetModelV1)
+	mux.HandleFunc("POST /api/v1/models/pull", s.handlePullModelV1)
+	mux.HandleFunc("DELETE /api/v1/models/{name}", s.handleDeleteModelV1)
+	mux.HandleFunc("POST /api/v1/models/copy", s.handleCopyModelV1)
+	mux.HandleFunc("POST /api/v1/models/tags", s.handleTagModelV1)
+	mux.HandleFunc("GET /api/v1/models/{name}/tags", s.handleListModelTagsV1)
+
+	// Enterprise: Evaluation management
+	mux.HandleFunc("GET /api/v1/evals", s.handleListEvalsV1)
+	mux.HandleFunc("GET /api/v1/evals/{id}", s.handleGetEvalV1)
+	mux.HandleFunc("DELETE /api/v1/evals/{id}", s.handleDeleteEvalV1)
+	mux.HandleFunc("POST /api/v1/evals/compare", s.handleCompareEvalsV1)
+
+	// Enterprise: Training management
+	mux.HandleFunc("GET /api/v1/training/jobs", s.handleListTrainingJobsV1)
+	mux.HandleFunc("POST /api/v1/training/jobs", s.handleCreateTrainingJobV1)
+	mux.HandleFunc("GET /api/v1/training/jobs/{id}", s.handleGetTrainingJobV1)
+	mux.HandleFunc("DELETE /api/v1/training/jobs/{id}", s.handleCancelTrainingJobV1)
+	mux.HandleFunc("GET /api/v1/training/jobs/{id}/logs", s.handleTrainingJobLogsV1)
+
+	// Enterprise: Audit log
+	mux.HandleFunc("GET /api/v1/audit", s.handleListAuditV1)
+	mux.HandleFunc("GET /api/v1/audit/{id}", s.handleGetAuditV1)
+
+	// Enterprise: Webhooks
+	mux.HandleFunc("GET /api/v1/webhooks", s.handleListWebhooksV1)
+	mux.HandleFunc("POST /api/v1/webhooks", s.handleCreateWebhookV1)
+	mux.HandleFunc("DELETE /api/v1/webhooks/{id}", s.handleDeleteWebhookV1)
+	mux.HandleFunc("GET /api/v1/webhooks/{id}/deliveries", s.handleWebhookDeliveriesV1)
+
+	// Enterprise: Scheduled jobs
+	mux.HandleFunc("GET /api/v1/schedules", s.handleListSchedulesV1)
+	mux.HandleFunc("POST /api/v1/schedules", s.handleCreateScheduleV1)
+	mux.HandleFunc("GET /api/v1/schedules/{id}", s.handleGetScheduleV1)
+	mux.HandleFunc("DELETE /api/v1/schedules/{id}", s.handleDeleteScheduleV1)
+
+	// Enterprise: API Keys
+	mux.HandleFunc("GET /api/v1/apikeys", s.handleListAPIKeysV1)
+	mux.HandleFunc("POST /api/v1/apikeys", s.handleCreateAPIKeyV1)
+	mux.HandleFunc("DELETE /api/v1/apikeys/{id}", s.handleDeleteAPIKeyV1)
+
+	// Enterprise: Real-time events (SSE)
+	mux.HandleFunc("GET /api/v1/events", s.handleEventsV1)
+
+	// Enterprise: System info
+	mux.HandleFunc("GET /api/v1/system/info", s.handleSystemInfoV1)
+	mux.HandleFunc("GET /api/v1/system/health", s.handleSystemHealthV1)
 
 	// Catch-all for unmatched /api/ routes — return JSON errors, not HTML redirects.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -1128,6 +1194,23 @@ func (s *Server) handleUITrain(w http.ResponseWriter, r *http.Request) {
 	s.renderTemplate(w, "train.html", data)
 }
 
+func (s *Server) handleUIVersions(w http.ResponseWriter, r *http.Request) {
+	if s.tmpl == nil {
+		http.Error(w, "templates not loaded", http.StatusInternalServerError)
+		return
+	}
+	data := struct {
+		Page      string
+		PageTitle string
+		Version   string
+	}{
+		Page:      "versions",
+		PageTitle: "Versions",
+		Version:   version.Version,
+	}
+	s.renderTemplate(w, "versions.html", data)
+}
+
 func (s *Server) getCommits() []map[string]any {
 	commitsDir := filepath.Join(dataset.DatasetRoot, "commits")
 	freshPaths, _ := filepath.Glob(filepath.Join(commitsDir, "commit_*.json"))
@@ -1451,8 +1534,1256 @@ func (s *Server) handleBatchEval(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleUIVersions renders the versions management page.
-func (s *Server) handleUIVersions(w http.ResponseWriter, r *http.Request) {
+// ============================================================
+// Enterprise V1 API Handlers
+// ============================================================
+
+// Dataset V1 Handlers with pagination/filtering
+
+type DatasetListRequest struct {
+	Page     int    `json:"page"`
+	PageSize int    `json:"page_size"`
+	Search   string `json:"search"`
+	SortBy   string `json:"sort_by"`
+	SortDesc bool   `json:"sort_desc"`
+	Model    string `json:"model"`
+}
+
+func (s *Server) handleListDatasetsV1(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page := 1
+	pageSize := 20
+	if p := q.Get("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+	}
+	if ps := q.Get("page_size"); ps != "" {
+		fmt.Sscanf(ps, "%d", &pageSize)
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	commitsDir := filepath.Join(dataset.DatasetRoot, "commits")
+	freshPaths, _ := filepath.Glob(filepath.Join(commitsDir, "commit_*.json"))
+	trainedDir := filepath.Join(commitsDir, "trained")
+	archivedPaths, _ := filepath.Glob(filepath.Join(trainedDir, "commit_*.json"))
+	allPaths := append(freshPaths, archivedPaths...)
+
+	var commits []map[string]any
+	for _, p := range allPaths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var commit dataset.Commit
+		if json.Unmarshal(data, &commit) != nil {
+			continue
+		}
+		commits = append(commits, map[string]any{
+			"id":          commit.CommitID,
+			"timestamp":   commit.Timestamp,
+			"model":       commit.Model,
+			"datapoints":  len(commit.Datapoints),
+			"commit_json": string(data),
+		})
+	}
+
+	// Filter
+	if model := q.Get("model"); model != "" {
+		filtered := commits[:0]
+		for _, c := range commits {
+			if c["model"] == model {
+				filtered = append(filtered, c)
+			}
+		}
+		commits = filtered
+	}
+	if search := q.Get("search"); search != "" {
+		filtered := commits[:0]
+		search = strings.ToLower(search)
+		for _, c := range commits {
+			id := strings.ToLower(fmt.Sprint(c["id"]))
+			model := strings.ToLower(fmt.Sprint(c["model"]))
+			if strings.Contains(id, search) || strings.Contains(model, search) {
+				filtered = append(filtered, c)
+			}
+		}
+		commits = filtered
+	}
+
+	// Sort
+	sortBy := q.Get("sort_by")
+	if sortBy == "" {
+		sortBy = "timestamp"
+	}
+	sortDesc := q.Get("sort_desc") == "true"
+	sort.Slice(commits, func(i, j int) bool {
+		var less bool
+		switch sortBy {
+		case "id":
+			less = fmt.Sprint(commits[i]["id"]) < fmt.Sprint(commits[j]["id"])
+		case "model":
+			less = fmt.Sprint(commits[i]["model"]) < fmt.Sprint(commits[j]["model"])
+		case "datapoints":
+			less = fmt.Sprint(commits[i]["datapoints"]) < fmt.Sprint(commits[j]["datapoints"])
+		default:
+			less = fmt.Sprint(commits[i]["timestamp"]) < fmt.Sprint(commits[j]["timestamp"])
+		}
+		if sortDesc {
+			return !less
+		}
+		return less
+	})
+
+	total := len(commits)
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"data":  commits[start:end],
+		"page":  page,
+		"size":  pageSize,
+		"total": total,
+		"pages": (total + pageSize - 1) / pageSize,
+	})
+}
+
+func (s *Server) handleGetDatasetV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	commitsDir := filepath.Join(dataset.DatasetRoot, "commits")
+	trainedDir := filepath.Join(commitsDir, "trained")
+
+	for _, dir := range []string{commitsDir, trainedDir} {
+		path := filepath.Join(dir, "commit_"+id+".json")
+		data, err := os.ReadFile(path)
+		if err == nil {
+			var commit dataset.Commit
+			if json.Unmarshal(data, &commit) == nil {
+				json.NewEncoder(w).Encode(map[string]any{
+					"data": commit,
+				})
+				return
+			}
+		}
+	}
+	writeJSONError(w, "dataset not found", http.StatusNotFound)
+}
+
+func (s *Server) handleDeleteDatasetV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	commitsDir := filepath.Join(dataset.DatasetRoot, "commits")
+	trainedDir := filepath.Join(commitsDir, "trained")
+
+	deleted := false
+	for _, dir := range []string{commitsDir, trainedDir} {
+		path := filepath.Join(dir, "commit_"+id+".json")
+		if err := os.Remove(path); err == nil {
+			deleted = true
+		}
+	}
+	if !deleted {
+		writeJSONError(w, "dataset not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "id": id})
+}
+
+type ExportDatasetV1Request struct {
+	Format string   `json:"format"` // json, csv, jsonl
+	IDs    []string `json:"ids"`
+	All    bool     `json:"all"`
+	Model  string   `json:"model"`
+	Output string   `json:"output"` // download, path
+	Path   string   `json:"path"`
+}
+
+func (s *Server) handleExportDatasetV1(w http.ResponseWriter, r *http.Request) {
+	var req ExportDatasetV1Request
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Format == "" {
+		req.Format = "json"
+	}
+
+	commitsDir := filepath.Join(dataset.DatasetRoot, "commits")
+	trainedDir := filepath.Join(commitsDir, "trained")
+	freshPaths, _ := filepath.Glob(filepath.Join(commitsDir, "commit_*.json"))
+	archivedPaths, _ := filepath.Glob(filepath.Join(trainedDir, "commit_*.json"))
+	allPaths := append(freshPaths, archivedPaths...)
+
+	var allCommits []dataset.Commit
+	for _, p := range allPaths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var commit dataset.Commit
+		if json.Unmarshal(data, &commit) == nil {
+			if req.All || len(req.IDs) == 0 || slices.Contains(req.IDs, commit.CommitID) {
+				if req.Model == "" || commit.Model == req.Model {
+					allCommits = append(allCommits, commit)
+				}
+			}
+		}
+	}
+
+	var output []byte
+	var filename string
+	var contentType string
+
+	switch req.Format {
+	case "csv":
+		contentType = "text/csv"
+		filename = "lumen-datasets-" + time.Now().Format("20060102-150405") + ".csv"
+		var b strings.Builder
+		b.WriteString("commit_id,timestamp,model,datapoints\n")
+		for _, c := range allCommits {
+			b.WriteString(fmt.Sprintf("%s,%s,%s,%d\n", c.CommitID, c.Timestamp, c.Model, len(c.Datapoints)))
+		}
+		output = []byte(b.String())
+	case "jsonl":
+		contentType = "application/jsonl"
+		filename = "lumen-datasets-" + time.Now().Format("20060102-150405") + ".jsonl"
+		var parts []string
+		for _, c := range allCommits {
+			for _, dp := range c.Datapoints {
+				data, _ := json.Marshal(dp)
+				parts = append(parts, string(data))
+			}
+		}
+		output = []byte(strings.Join(parts, "\n"))
+	default: // json
+		contentType = "application/json"
+		filename = "lumen-datasets-" + time.Now().Format("20060102-150405") + ".json"
+		output, _ = json.MarshalIndent(map[string]any{
+			"exported_at": time.Now().Format(time.RFC3339),
+			"total":       len(allCommits),
+			"commits":     allCommits,
+		}, "", "  ")
+	}
+
+	if req.Output == "path" && req.Path != "" {
+		if err := os.WriteFile(req.Path, output, 0644); err != nil {
+			writeJSONError(w, "write failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"status": "exported", "path": req.Path})
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+	w.Write(output)
+}
+
+func (s *Server) handleImportDatasetV1(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Data  []dataset.Commit `json:"data"`
+		Path  string           `json:"path"`
+		Force bool             `json:"force"`
+	}
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(req.Data) == 0 && req.Path == "" {
+		writeJSONError(w, "data or path required", http.StatusBadRequest)
+		return
+	}
+
+	var commits []dataset.Commit
+	if len(req.Data) > 0 {
+		commits = req.Data
+	} else {
+		data, err := os.ReadFile(req.Path)
+		if err != nil {
+			writeJSONError(w, "read path: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		var importData map[string]any
+		if json.Unmarshal(data, &importData) == nil {
+			if arr, ok := importData["commits"].([]any); ok {
+				for _, item := range arr {
+					if m, ok := item.(map[string]any); ok {
+						b, _ := json.Marshal(m)
+						var c dataset.Commit
+						json.Unmarshal(b, &c)
+						commits = append(commits, c)
+					}
+				}
+			}
+		}
+	}
+
+	imported := 0
+	for _, c := range commits {
+		if c.CommitID == "" {
+			c.CommitID = fmt.Sprintf("%x", time.Now().UnixNano())
+		}
+		c.Timestamp = time.Now().Format(time.RFC3339)
+		path := filepath.Join(dataset.DatasetRoot, "commits", "commit_"+c.CommitID+".json")
+		data, _ := json.MarshalIndent(c, "", "  ")
+		if err := os.WriteFile(path, data, 0644); err == nil {
+			imported++
+		}
+	}
+	json.NewEncoder(w).Encode(map[string]any{"status": "imported", "count": imported})
+}
+
+// Model V1 Handlers
+
+func (s *Server) handleListModelsV1(w http.ResponseWriter, r *http.Request) {
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	resp, err := client.List(ctx)
+	if err != nil {
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	models := make([]map[string]any, len(resp.Models))
+	for i, m := range resp.Models {
+		models[i] = map[string]any{
+			"name":        m.Name,
+			"model":       m.Model,
+			"size":        m.Size,
+			"digest":      m.Digest,
+			"modified_at": m.ModifiedAt,
+			"details":     m.Details,
+		}
+	}
+	json.NewEncoder(w).Encode(map[string]any{"models": models, "total": len(models)})
+}
+
+func (s *Server) handleGetModelV1(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	resp, err := client.Show(ctx, ollama.ShowRequest{Model: name})
+	if err != nil {
+		writeJSONError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(resp)
+}
+
+type PullModelRequest struct {
+	Name   string `json:"name"`
+	Stream bool   `json:"stream"`
+}
+
+func (s *Server) handlePullModelV1(w http.ResponseWriter, r *http.Request) {
+	var req PullModelRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		writeJSONError(w, "name required", http.StatusBadRequest)
+		return
+	}
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx := r.Context()
+	if req.Stream {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		flusher, _ := w.(http.Flusher)
+		err := client.PullStream(ctx, ollama.PullRequest{Model: req.Name}, func(progress ollama.PullProgressChunk) error {
+			data, _ := json.Marshal(progress)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+			return nil
+		})
+		if err != nil {
+			fmt.Fprintf(w, "data: {\"error\":%q}\n\n", err.Error())
+			flusher.Flush()
+		}
+		return
+	}
+	err := client.Pull(ctx, ollama.PullRequest{Model: req.Name})
+	if err != nil {
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "pulled", "model": req.Name})
+}
+
+func (s *Server) handleDeleteModelV1(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	err := client.Delete(ctx, name)
+	if err != nil {
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "model": name})
+}
+
+type CopyModelRequest struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+func (s *Server) handleCopyModelV1(w http.ResponseWriter, r *http.Request) {
+	var req CopyModelRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Source == "" || req.Target == "" {
+		writeJSONError(w, "source and target required", http.StatusBadRequest)
+		return
+	}
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	err := client.Copy(ctx, req.Source, req.Target)
+	if err != nil {
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "copied", "source": req.Source, "target": req.Target})
+}
+
+type TagModelRequest struct {
+	Model string `json:"model"`
+	Tag   string `json:"tag"`
+}
+
+func (s *Server) handleTagModelV1(w http.ResponseWriter, r *http.Request) {
+	var req TagModelRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Model == "" || req.Tag == "" {
+		writeJSONError(w, "model and tag required", http.StatusBadRequest)
+		return
+	}
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	err := client.Create(ctx, ollama.CreateRequest{Model: req.Tag, From: req.Model})
+	if err != nil {
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "tagged", "model": req.Model, "tag": req.Tag})
+}
+
+func (s *Server) handleListModelTagsV1(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	resp, err := client.List(ctx)
+	if err != nil {
+		writeJSONError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var tags []string
+	for _, m := range resp.Models {
+		if strings.HasPrefix(m.Name, name+":") {
+			tags = append(tags, m.Name)
+		}
+	}
+	json.NewEncoder(w).Encode(map[string]any{"model": name, "tags": tags, "total": len(tags)})
+}
+
+// Evaluation V1 Handlers
+
+func (s *Server) handleListEvalsV1(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page := 1
+	pageSize := 20
+	if p := q.Get("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+	}
+	if ps := q.Get("page_size"); ps != "" {
+		fmt.Sscanf(ps, "%d", &pageSize)
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	evalMu.RLock()
+	evals := make([]map[string]any, 0, len(evalStore))
+	for id, result := range evalStore {
+		evals = append(evals, map[string]any{
+			"id":         id,
+			"model_a":    result.ModelA,
+			"model_b":    result.ModelB,
+			"status":     result.Status,
+			"started_at": result.StartedAt,
+			"completed":  result.Status == "completed",
+		})
+	}
+	evalMu.RUnlock()
+
+	sort.Slice(evals, func(i, j int) bool {
+		return fmt.Sprint(evals[i]["started_at"]) > fmt.Sprint(evals[j]["started_at"])
+	})
+
+	total := len(evals)
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"data":  evals[start:end],
+		"page":  page,
+		"size":  pageSize,
+		"total": total,
+		"pages": (total + pageSize - 1) / pageSize,
+	})
+}
+
+func (s *Server) handleGetEvalV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	evalMu.RLock()
+	result, ok := evalStore[id]
+	evalMu.RUnlock()
+	if !ok {
+		writeJSONError(w, "eval not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) handleDeleteEvalV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	evalMu.Lock()
+	_, ok := evalStore[id]
+	if ok {
+		delete(evalStore, id)
+	}
+	evalMu.Unlock()
+	if !ok {
+		writeJSONError(w, "eval not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "id": id})
+}
+
+type CompareEvalsRequest struct {
+	EvalIDs []string `json:"eval_ids"`
+}
+
+func (s *Server) handleCompareEvalsV1(w http.ResponseWriter, r *http.Request) {
+	var req CompareEvalsRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(req.EvalIDs) < 2 {
+		writeJSONError(w, "at least 2 eval IDs required", http.StatusBadRequest)
+		return
+	}
+
+	evalMu.RLock()
+	results := make([]*EvalResult, 0, len(req.EvalIDs))
+	for _, id := range req.EvalIDs {
+		if r, ok := evalStore[id]; ok {
+			results = append(results, r)
+		}
+	}
+	evalMu.RUnlock()
+
+	if len(results) < 2 {
+		writeJSONError(w, "not enough valid evals found", http.StatusNotFound)
+		return
+	}
+
+	comparison := map[string]any{
+		"evals": make([]map[string]any, len(results)),
+	}
+	for i, r := range results {
+		comparison["evals"].([]map[string]any)[i] = map[string]any{
+			"id":         r.ID,
+			"model_a":    r.ModelA,
+			"model_b":    r.ModelB,
+			"status":     r.Status,
+			"started_at": r.StartedAt,
+			"avg_score_a": func() float64 {
+				if len(r.Results) == 0 {
+					return 0
+				}
+				sum := 0.0
+				for _, rr := range r.Results {
+					sum += rr.ScoreA
+				}
+				return sum / float64(len(r.Results))
+			}(),
+			"avg_score_b": func() float64 {
+				if len(r.Results) == 0 {
+					return 0
+				}
+				sum := 0.0
+				for _, rr := range r.Results {
+					sum += rr.ScoreB
+				}
+				return sum / float64(len(r.Results))
+			}(),
+		}
+	}
+	json.NewEncoder(w).Encode(comparison)
+}
+
+// Training Jobs V1 Handlers
+
+type TrainingJob struct {
+	ID          string         `json:"id"`
+	Type        string         `json:"type"` // fewshot, lora
+	Status      string         `json:"status"`
+	Model       string         `json:"model"`
+	BaseModel   string         `json:"base_model"`
+	Config      map[string]any `json:"config"`
+	CreatedAt   time.Time      `json:"created_at"`
+	StartedAt   *time.Time     `json:"started_at,omitempty"`
+	CompletedAt *time.Time     `json:"completed_at,omitempty"`
+	Error       string         `json:"error,omitempty"`
+	Result      map[string]any `json:"result,omitempty"`
+	Logs        []string       `json:"logs,omitempty"`
+}
+
+var (
+	trainingJobs = make(map[string]*TrainingJob)
+	trainingMu   sync.RWMutex
+)
+
+func (s *Server) handleListTrainingJobsV1(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page := 1
+	pageSize := 20
+	if p := q.Get("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+	}
+	if ps := q.Get("page_size"); ps != "" {
+		fmt.Sscanf(ps, "%d", &pageSize)
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	trainingMu.RLock()
+	jobs := make([]*TrainingJob, 0, len(trainingJobs))
+	for _, job := range trainingJobs {
+		jobs = append(jobs, job)
+	}
+	trainingMu.RUnlock()
+
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+	})
+
+	total := len(jobs)
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"data":  jobs[start:end],
+		"page":  page,
+		"size":  pageSize,
+		"total": total,
+		"pages": (total + pageSize - 1) / pageSize,
+	})
+}
+
+type CreateTrainingJobRequest struct {
+	Type      string         `json:"type"` // fewshot, lora
+	BaseModel string         `json:"base_model"`
+	Config    map[string]any `json:"config"`
+}
+
+func (s *Server) handleCreateTrainingJobV1(w http.ResponseWriter, r *http.Request) {
+	var req CreateTrainingJobRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Type != "fewshot" && req.Type != "lora" {
+		writeJSONError(w, "type must be 'fewshot' or 'lora'", http.StatusBadRequest)
+		return
+	}
+	if req.BaseModel == "" {
+		writeJSONError(w, "base_model required", http.StatusBadRequest)
+		return
+	}
+
+	id := fmt.Sprintf("train-%d", time.Now().UnixNano())
+	job := &TrainingJob{
+		ID:        id,
+		Type:      req.Type,
+		Status:    "pending",
+		BaseModel: req.BaseModel,
+		Config:    req.Config,
+		CreatedAt: time.Now(),
+		Logs:      []string{},
+	}
+	trainingMu.Lock()
+	trainingJobs[id] = job
+	trainingMu.Unlock()
+
+	go s.runTrainingJob(job)
+
+	json.NewEncoder(w).Encode(map[string]any{"job_id": id, "status": "pending"})
+}
+
+func (s *Server) runTrainingJob(job *TrainingJob) {
+	trainingMu.Lock()
+	job.Status = "running"
+	now := time.Now()
+	job.StartedAt = &now
+	trainingMu.Unlock()
+
+	var result map[string]any
+	var err error
+
+	if job.Type == "fewshot" {
+		useAll := false
+		if v, ok := job.Config["use_all"].(bool); ok {
+			useAll = v
+		}
+		err = dataset.RunTrain(s.cfg.OllamaHost, job.BaseModel, useAll)
+		if err == nil {
+			result = map[string]any{"model": "lumen-tuned", "base_model": job.BaseModel}
+		}
+	} else {
+		adapterPath, _ := job.Config["adapter_path"].(string)
+		modelName, _ := job.Config["model_name"].(string)
+		if adapterPath == "" || modelName == "" {
+			err = fmt.Errorf("adapter_path and model_name required for lora")
+		} else {
+			client := ollama.NewClient(s.cfg.OllamaHost)
+			ctx := context.Background()
+			digest, e := client.CreateBlob(ctx, adapterPath)
+			if e != nil {
+				err = fmt.Errorf("upload adapter: %w", e)
+			} else {
+				createReq := ollama.CreateRequest{
+					Model:    modelName,
+					From:     job.BaseModel,
+					Adapters: map[string]string{"adapter": digest},
+				}
+				e = client.Create(ctx, createReq)
+				if e != nil {
+					err = fmt.Errorf("create model: %w", e)
+				} else {
+					result = map[string]any{"model": modelName, "base_model": job.BaseModel, "adapter_digest": digest}
+				}
+			}
+		}
+	}
+
+	trainingMu.Lock()
+	defer trainingMu.Unlock()
+	now = time.Now()
+	job.CompletedAt = &now
+	if err != nil {
+		job.Status = "failed"
+		job.Error = err.Error()
+	} else {
+		job.Status = "completed"
+		job.Result = result
+	}
+}
+
+func (s *Server) handleGetTrainingJobV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	trainingMu.RLock()
+	job, ok := trainingJobs[id]
+	trainingMu.RUnlock()
+	if !ok {
+		writeJSONError(w, "job not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(job)
+}
+
+func (s *Server) handleCancelTrainingJobV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	trainingMu.Lock()
+	job, ok := trainingJobs[id]
+	if ok {
+		if job.Status == "pending" || job.Status == "running" {
+			job.Status = "cancelled"
+		}
+	}
+	trainingMu.Unlock()
+	if !ok {
+		writeJSONError(w, "job not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "cancelled", "id": id})
+}
+
+func (s *Server) handleTrainingJobLogsV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	trainingMu.RLock()
+	job, ok := trainingJobs[id]
+	trainingMu.RUnlock()
+	if !ok {
+		writeJSONError(w, "job not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]any{"id": id, "logs": job.Logs})
+}
+
+// Audit Log V1 Handlers
+
+func (s *Server) handleListAuditV1(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page := 1
+	pageSize := 50
+	if p := q.Get("page"); p != "" {
+		fmt.Sscanf(p, "%d", &page)
+	}
+	if ps := q.Get("page_size"); ps != "" {
+		fmt.Sscanf(ps, "%d", &pageSize)
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 50
+	}
+
+	// Return empty for now - audit log would need to be integrated
+	json.NewEncoder(w).Encode(map[string]any{
+		"data":  []any{},
+		"page":  page,
+		"size":  pageSize,
+		"total": 0,
+		"pages": 0,
+	})
+}
+
+func (s *Server) handleGetAuditV1(w http.ResponseWriter, r *http.Request) {
+	writeJSONError(w, "audit entry not found", http.StatusNotFound)
+}
+
+// Webhook V1 Handlers
+
+type Webhook struct {
+	ID        string    `json:"id"`
+	URL       string    `json:"url"`
+	Events    []string  `json:"events"`
+	Secret    string    `json:"secret,omitempty"`
+	Active    bool      `json:"active"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+var (
+	webhooks  = make(map[string]*Webhook)
+	webhookMu sync.RWMutex
+)
+
+func (s *Server) handleListWebhooksV1(w http.ResponseWriter, r *http.Request) {
+	webhookMu.RLock()
+	hooks := make([]*Webhook, 0, len(webhooks))
+	for _, h := range webhooks {
+		hooks = append(hooks, h)
+	}
+	webhookMu.RUnlock()
+	json.NewEncoder(w).Encode(map[string]any{"webhooks": hooks})
+}
+
+type CreateWebhookRequest struct {
+	URL    string   `json:"url"`
+	Events []string `json:"events"`
+	Secret string   `json:"secret"`
+}
+
+func (s *Server) handleCreateWebhookV1(w http.ResponseWriter, r *http.Request) {
+	var req CreateWebhookRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.URL == "" {
+		writeJSONError(w, "url required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Events) == 0 {
+		req.Events = []string{"eval.completed", "training.completed", "dataset.created"}
+	}
+	id := fmt.Sprintf("wh-%d", time.Now().UnixNano())
+	wh := &Webhook{
+		ID:        id,
+		URL:       req.URL,
+		Events:    req.Events,
+		Secret:    req.Secret,
+		Active:    true,
+		CreatedAt: time.Now(),
+	}
+	webhookMu.Lock()
+	webhooks[id] = wh
+	webhookMu.Unlock()
+	json.NewEncoder(w).Encode(wh)
+}
+
+func (s *Server) handleDeleteWebhookV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	webhookMu.Lock()
+	_, ok := webhooks[id]
+	if ok {
+		delete(webhooks, id)
+	}
+	webhookMu.Unlock()
+	if !ok {
+		writeJSONError(w, "webhook not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "id": id})
+}
+
+func (s *Server) handleWebhookDeliveriesV1(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(map[string]any{"deliveries": []any{}})
+}
+
+// Schedule V1 Handlers
+
+type Schedule struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Cron      string         `json:"cron"`
+	Action    string         `json:"action"` // generate, train, eval
+	Config    map[string]any `json:"config"`
+	Active    bool           `json:"active"`
+	LastRun   *time.Time     `json:"last_run,omitempty"`
+	NextRun   *time.Time     `json:"next_run,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+var (
+	schedules  = make(map[string]*Schedule)
+	scheduleMu sync.RWMutex
+)
+
+func (s *Server) handleListSchedulesV1(w http.ResponseWriter, r *http.Request) {
+	scheduleMu.RLock()
+	sch := make([]*Schedule, 0, len(schedules))
+	for _, s := range schedules {
+		sch = append(sch, s)
+	}
+	scheduleMu.RUnlock()
+	json.NewEncoder(w).Encode(map[string]any{"schedules": sch})
+}
+
+type CreateScheduleRequest struct {
+	Name   string         `json:"name"`
+	Cron   string         `json:"cron"`
+	Action string         `json:"action"`
+	Config map[string]any `json:"config"`
+}
+
+func (s *Server) handleCreateScheduleV1(w http.ResponseWriter, r *http.Request) {
+	var req CreateScheduleRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" || req.Cron == "" || req.Action == "" {
+		writeJSONError(w, "name, cron, and action required", http.StatusBadRequest)
+		return
+	}
+	id := fmt.Sprintf("sch-%d", time.Now().UnixNano())
+	sch := &Schedule{
+		ID:        id,
+		Name:      req.Name,
+		Cron:      req.Cron,
+		Action:    req.Action,
+		Config:    req.Config,
+		Active:    true,
+		CreatedAt: time.Now(),
+	}
+	scheduleMu.Lock()
+	schedules[id] = sch
+	scheduleMu.Unlock()
+	json.NewEncoder(w).Encode(sch)
+}
+
+func (s *Server) handleGetScheduleV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	scheduleMu.RLock()
+	sch, ok := schedules[id]
+	scheduleMu.RUnlock()
+	if !ok {
+		writeJSONError(w, "schedule not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(sch)
+}
+
+func (s *Server) handleDeleteScheduleV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	scheduleMu.Lock()
+	_, ok := schedules[id]
+	if ok {
+		delete(schedules, id)
+	}
+	scheduleMu.Unlock()
+	if !ok {
+		writeJSONError(w, "schedule not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "id": id})
+}
+
+// API Key V1 Handlers
+
+type APIKey struct {
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Key       string     `json:"key,omitempty"`
+	Prefix    string     `json:"prefix"`
+	Scopes    []string   `json:"scopes"`
+	Active    bool       `json:"active"`
+	CreatedAt time.Time  `json:"created_at"`
+	LastUsed  *time.Time `json:"last_used,omitempty"`
+}
+
+var (
+	apiKeys  = make(map[string]*APIKey)
+	apiKeyMu sync.RWMutex
+)
+
+func (s *Server) handleListAPIKeysV1(w http.ResponseWriter, r *http.Request) {
+	apiKeyMu.RLock()
+	keys := make([]*APIKey, 0, len(apiKeys))
+	for _, k := range apiKeys {
+		keys = append(keys, k)
+	}
+	apiKeyMu.RUnlock()
+	json.NewEncoder(w).Encode(map[string]any{"keys": keys})
+}
+
+type CreateAPIKeyRequest struct {
+	Name   string   `json:"name"`
+	Scopes []string `json:"scopes"`
+}
+
+func (s *Server) handleCreateAPIKeyV1(w http.ResponseWriter, r *http.Request) {
+	var req CreateAPIKeyRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeJSONError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		writeJSONError(w, "name required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Scopes) == 0 {
+		req.Scopes = []string{"read", "write"}
+	}
+	id := fmt.Sprintf("key-%d", time.Now().UnixNano())
+	key := "lmn_" + fmt.Sprintf("%x", time.Now().UnixNano())[:32]
+	prefix := key[:8] + "..."
+	k := &APIKey{
+		ID:        id,
+		Name:      req.Name,
+		Key:       key,
+		Prefix:    prefix,
+		Scopes:    req.Scopes,
+		Active:    true,
+		CreatedAt: time.Now(),
+	}
+	apiKeyMu.Lock()
+	apiKeys[id] = k
+	apiKeyMu.Unlock()
+	json.NewEncoder(w).Encode(k)
+}
+
+func (s *Server) handleDeleteAPIKeyV1(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	apiKeyMu.Lock()
+	_, ok := apiKeys[id]
+	if ok {
+		delete(apiKeys, id)
+	}
+	apiKeyMu.Unlock()
+	if !ok {
+		writeJSONError(w, "api key not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "id": id})
+}
+
+// SSE Events V1
+
+func (s *Server) handleEventsV1(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSONError(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ctx := r.Context()
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	// Send initial connection event
+	fmt.Fprintf(w, "data: {\"type\":\"connected\",\"timestamp\":\"%s\"}\n\n", time.Now().Format(time.RFC3339))
+	flusher.Flush()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Send heartbeat with stats
+			stats := map[string]any{
+				"type":          "stats",
+				"timestamp":     time.Now().Format(time.RFC3339),
+				"requests":      metricsRequestsTotal.Load(),
+				"errors":        metricsErrorsTotal.Load(),
+				"evals":         metricsEvalRuns.Load(),
+				"git_commits":   metricsGitCommits.Load(),
+				"training_jobs": len(trainingJobs),
+			}
+			data, _ := json.Marshal(stats)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
+}
+
+// System Info V1
+
+func (s *Server) handleSystemInfoV1(w http.ResponseWriter, r *http.Request) {
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"version":       version.Version,
+		"uptime":        time.Since(s.startedAt).Truncate(time.Second).String(),
+		"go_version":    runtime.Version(),
+		"go_os":         runtime.GOOS,
+		"go_arch":       runtime.GOARCH,
+		"num_cpu":       runtime.NumCPU(),
+		"num_goroutine": runtime.NumGoroutine(),
+		"mem_alloc":     mem.Alloc,
+		"mem_sys":       mem.Sys,
+		"mem_heap":      mem.HeapAlloc,
+		"dataset_root":  dataset.DatasetRoot,
+		"ollama_host":   s.cfg.OllamaHost,
+		"ollama_model":  s.cfg.OllamaModel,
+	})
+}
+
+func (s *Server) handleSystemHealthV1(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	ollamaOK := true
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.OllamaHost+"/api/tags", nil)
+	if err == nil {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			ollamaOK = false
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+	} else {
+		ollamaOK = false
+	}
+
+	diskOK := true
+	tmpPath := filepath.Join(dataset.DatasetRoot, ".healthz-probe")
+	if f, err := os.Create(tmpPath); err != nil {
+		diskOK = false
+	} else {
+		f.Close()
+		os.Remove(tmpPath)
+	}
+
+	datasetOK := true
+	if info, err := os.Stat(dataset.DatasetRoot); err != nil || !info.IsDir() {
+		datasetOK = false
+	}
+
+	overall := "ok"
+	if !ollamaOK || !diskOK || !datasetOK {
+		overall = "degraded"
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"status": overall,
+		"checks": map[string]any{
+			"ollama":  map[string]any{"status": map[bool]string{true: "ok", false: "down"}[ollamaOK]},
+			"disk":    map[string]any{"status": map[bool]string{true: "ok", false: "down"}[diskOK]},
+			"dataset": map[string]any{"status": map[bool]string{true: "ok", false: "down"}[datasetOK]},
+		},
+		"timestamp": time.Now().Format(time.RFC3339),
+	})
+}
+
+func (s *Server) handleUIModelsManage(w http.ResponseWriter, r *http.Request) {
+	if s.tmpl == nil {
+		http.Error(w, "templates not loaded", http.StatusInternalServerError)
+		return
+	}
+	client := ollama.NewClient(s.cfg.OllamaHost)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	resp, _ := client.List(ctx)
+	models := make([]any, len(resp.Models))
+	for i, m := range resp.Models {
+		models[i] = m
+	}
+	data := struct {
+		Page      string
+		PageTitle string
+		Version   string
+		Models    []any
+	}{
+		Page:      "models-manage",
+		PageTitle: "Model Management",
+		Version:   version.Version,
+		Models:    models,
+	}
+	s.renderTemplate(w, "models-manage.html", data)
+}
+
+func (s *Server) handleUITrainingJobs(w http.ResponseWriter, r *http.Request) {
 	if s.tmpl == nil {
 		http.Error(w, "templates not loaded", http.StatusInternalServerError)
 		return
@@ -1462,9 +2793,81 @@ func (s *Server) handleUIVersions(w http.ResponseWriter, r *http.Request) {
 		PageTitle string
 		Version   string
 	}{
-		Page:      "versions",
-		PageTitle: "Versions",
+		Page:      "training",
+		PageTitle: "Training Jobs",
 		Version:   version.Version,
 	}
-	s.renderTemplate(w, "versions.html", data)
+	s.renderTemplate(w, "training.html", data)
+}
+
+func (s *Server) handleUIAudit(w http.ResponseWriter, r *http.Request) {
+	if s.tmpl == nil {
+		http.Error(w, "templates not loaded", http.StatusInternalServerError)
+		return
+	}
+	data := struct {
+		Page      string
+		PageTitle string
+		Version   string
+	}{
+		Page:      "audit",
+		PageTitle: "Audit Log",
+		Version:   version.Version,
+	}
+	s.renderTemplate(w, "audit.html", data)
+}
+
+func (s *Server) handleUIWebhooks(w http.ResponseWriter, r *http.Request) {
+	if s.tmpl == nil {
+		http.Error(w, "templates not loaded", http.StatusInternalServerError)
+		return
+	}
+	data := struct {
+		Page      string
+		PageTitle string
+		Version   string
+	}{
+		Page:      "webhooks",
+		PageTitle: "Webhooks",
+		Version:   version.Version,
+	}
+	s.renderTemplate(w, "webhooks.html", data)
+}
+
+func (s *Server) handleUISchedules(w http.ResponseWriter, r *http.Request) {
+	if s.tmpl == nil {
+		http.Error(w, "templates not loaded", http.StatusInternalServerError)
+		return
+	}
+	data := struct {
+		Page      string
+		PageTitle string
+		Version   string
+	}{
+		Page:      "schedules",
+		PageTitle: "Scheduled Jobs",
+		Version:   version.Version,
+	}
+	s.renderTemplate(w, "schedules.html", data)
+}
+
+func (s *Server) handleUISettings(w http.ResponseWriter, r *http.Request) {
+	if s.tmpl == nil {
+		http.Error(w, "templates not loaded", http.StatusInternalServerError)
+		return
+	}
+	data := struct {
+		Page        string
+		PageTitle   string
+		Version     string
+		Config      *config.Config
+		DatasetRoot string
+	}{
+		Page:        "settings",
+		PageTitle:   "Settings",
+		Version:     version.Version,
+		Config:      s.cfg,
+		DatasetRoot: dataset.DatasetRoot,
+	}
+	s.renderTemplate(w, "settings.html", data)
 }

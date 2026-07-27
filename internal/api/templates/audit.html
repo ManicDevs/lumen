@@ -1,0 +1,124 @@
+{{define "content"}}
+<p class="text-sm text-secondary mb-6">Audit log of all system activities: API requests, data mutations, security events, and administrative actions.</p>
+
+<div class="card mb-6">
+  <div class="card-header flex items-center justify-between">
+    <h3>Audit Log</h3>
+    <div class="flex items-center gap-3">
+      <select class="form-select" id="audit-level" style="width:auto;">
+        <option value="">All Levels</option>
+        <option value="info">Info</option>
+        <option value="warning">Warning</option>
+        <option value="error">Error</option>
+      </select>
+      <input type="text" class="form-input" id="audit-search" placeholder="Search..." style="width:250px;">
+      <button class="btn btn-secondary btn-sm" onclick="loadAudit()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-container">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:18%">Timestamp</th>
+            <th style="width:10%">Level</th>
+            <th style="width:15%">Action</th>
+            <th style="width:15%">Resource</th>
+            <th style="width:22%">Details</th>
+            <th style="width:10%">Actor</th>
+            <th style="width:10%">Status</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="7" class="loading"><span class="spinner"></span> Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="flex items-center justify-between p-4 border-t">
+      <span class="text-sm text-muted" id="audit-count">0 entries</span>
+      <div class="flex gap-2">
+        <button class="btn btn-secondary btn-sm" id="audit-prev" disabled onclick="changeAuditPage(-1)">Previous</button>
+        <button class="btn btn-secondary btn-sm" id="audit-next" disabled onclick="changeAuditPage(1)">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var auditPage = 1;
+var auditPageSize = 50;
+
+function loadAudit() {
+  var tbody = document.getElementById('audit-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="loading"><span class="spinner"></span> Loading...</td></tr>';
+  
+  var params = new URLSearchParams();
+  params.set('page', auditPage);
+  params.set('page_size', auditPageSize);
+  var level = document.getElementById('audit-level').value;
+  if (level) params.set('level', level);
+  var search = document.getElementById('audit-search').value.trim();
+  if (search) params.set('search', search);
+  
+  fetch('/api/v1/audit?' + params.toString()).then(function(r){return r.json();}).then(function(d) {
+    renderAudit(d.data || [], d.total || 0, d.pages || 0);
+  }).catch(function(err) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-error">Failed: ' + esc(err.message) + '</td></tr>';
+  });
+}
+
+function renderAudit(entries, total, pages) {
+  var tbody = document.getElementById('audit-tbody');
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-8">No audit entries found.</td></tr>';
+    updateAuditPagination(total, pages);
+    return;
+  }
+  var html = '';
+  entries.forEach(function(e) {
+    var levelClass = 'badge-neutral';
+    if (e.level === 'error') levelClass = 'badge-error';
+    else if (e.level === 'warning') levelClass = 'badge-warning';
+    else if (e.level === 'info') levelClass = 'badge-info';
+    
+    var statusClass = 'badge-success';
+    if (e.status === 'failed') statusClass = 'badge-error';
+    else if (e.status === 'pending') statusClass = 'badge-warning';
+    
+    var details = e.details || '';
+    if (typeof details === 'object') details = JSON.stringify(details);
+    if (details.length > 100) details = details.substring(0, 100) + '...';
+    
+    html += '<tr>';
+    html += '<td class="text-sm text-muted font-mono">' + (e.timestamp ? new Date(e.timestamp).toLocaleString() : '-') + '</td>';
+    html += '<td><span class="badge ' + levelClass + '">' + esc(e.level || '-') + '</span></td>';
+    html += '<td><code class="text-sm">' + esc(e.action || '-') + '</code></td>';
+    html += '<td><code class="text-sm">' + esc(e.resource || '-') + '</code></td>';
+    html += '<td class="text-sm text-muted max-w-xs truncate" title="' + esc(details) + '">' + esc(details) + '</td>';
+    html += '<td class="text-sm text-muted">' + esc(e.user || e.ip || '-') + '</td>';
+    html += '<td><span class="badge ' + statusClass + '">' + esc(e.status || '-') + '</span></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+  updateAuditPagination(total, pages);
+}
+
+function updateAuditPagination(total, pages) {
+  document.getElementById('audit-count').textContent = total + ' entries';
+  document.getElementById('audit-prev').disabled = auditPage <= 1;
+  document.getElementById('audit-next').disabled = auditPage >= pages;
+}
+
+function changeAuditPage(delta) {
+  auditPage += delta;
+  loadAudit();
+}
+
+document.getElementById('audit-level').addEventListener('change', function() { auditPage = 1; loadAudit(); });
+document.getElementById('audit-search').addEventListener('keypress', function(e) { if (e.key === 'Enter') { auditPage = 1; loadAudit(); } });
+
+loadAudit();
+</script>
+{{end}}

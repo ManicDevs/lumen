@@ -1,0 +1,179 @@
+{{define "content"}}
+<p class="text-sm text-secondary mb-6">Configure webhooks to receive real-time notifications for events like evaluation completion, training jobs, and dataset changes.</p>
+
+<div class="card mb-6">
+  <div class="card-header">
+    <h3>Create Webhook</h3>
+  </div>
+  <div class="card-body">
+    <form id="webhook-form" class="grid-2 gap-4">
+      <div class="form-group">
+        <label class="form-label">Webhook URL</label>
+        <input type="url" class="form-input" id="wh-url" placeholder="https://your-server.com/webhook" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Secret (optional)</label>
+        <input type="text" class="form-input" id="wh-secret" placeholder="Leave empty to auto-generate">
+        <p class="text-sm text-muted mt-1">Used to sign payloads (HMAC-SHA256)</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Events</label>
+        <div class="flex flex-wrap gap-2" id="wh-events">
+          <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="eval.completed" checked> eval.completed</label>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="training.completed" checked> training.completed</label>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="dataset.created" checked> dataset.created</label>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="model.pulled"> model.pulled</label>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" value="schedule.triggered"> schedule.triggered</label>
+        </div>
+      </div>
+      <div class="sm:col-span-2 flex gap-3">
+        <button type="submit" class="btn btn-brand">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Create Webhook
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header flex items-center justify-between">
+    <h3>Configured Webhooks</h3>
+    <button class="btn btn-secondary btn-sm" onclick="loadWebhooks()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-container">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:12%">ID</th>
+            <th style="width:25%">URL</th>
+            <th style="width:20%">Events</th>
+            <th style="width:10%">Status</th>
+            <th style="width:15%">Created</th>
+            <th style="width:18%">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="webhooks-tbody">
+          <tr><td colspan="6" class="loading"><span class="spinner"></span> Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="wh-modal">
+  <div class="modal-overlay" onclick="closeModal('wh-modal')"></div>
+  <div class="modal-content" style="max-width:700px;">
+    <div class="modal-header"><h3>Webhook Details</h3></div>
+    <div class="modal-body" id="wh-modal-body">
+      <div class="loading"><span class="spinner"></span> Loading...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('wh-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function loadWebhooks() {
+  var tbody = document.getElementById('webhooks-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="loading"><span class="spinner"></span> Loading...</td></tr>';
+  fetch('/api/v1/webhooks').then(function(r){return r.json();}).then(function(d) {
+    renderWebhooks(d.webhooks || []);
+  }).catch(function(err) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-error">Failed: ' + esc(err.message) + '</td></tr>';
+  });
+}
+
+function renderWebhooks(hooks) {
+  var tbody = document.getElementById('webhooks-tbody');
+  if (hooks.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-8">No webhooks configured. Create one above.</td></tr>';
+    return;
+  }
+  var html = '';
+  hooks.forEach(function(h) {
+    var events = (h.events || []).map(function(e) { return '<span class="badge badge-neutral badge-sm">' + esc(e) + '</span>'; }).join(' ');
+    var statusClass = h.active ? 'badge-success' : 'badge-neutral';
+    var statusText = h.active ? 'Active' : 'Inactive';
+    html += '<tr>';
+    html += '<td><code class="text-xs">' + esc(h.id) + '</code></td>';
+    html += '<td><code class="text-sm" title="' + esc(h.url) + '">' + esc(h.url) + '</code></td>';
+    html += '<td>' + events + '</td>';
+    html += '<td><span class="badge ' + statusClass + '">' + statusText + '</span></td>';
+    html += '<td class="text-sm text-muted">' + (h.created_at ? new Date(h.created_at).toLocaleString() : '-') + '</td>';
+    html += '<td>';
+    html += '<div class="flex items-center gap-1">';
+    html += '<button class="btn btn-ghost btn-sm" onclick="viewWebhook(\'' + esc(h.id) + '\')" title="View Details"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>';
+    html += '<button class="btn btn-ghost btn-sm text-error" onclick="deleteWebhook(\'' + esc(h.id) + '\')" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+    html += '</div></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+document.getElementById('webhook-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var events = Array.from(document.querySelectorAll('#wh-events input:checked')).map(function(cb) { return cb.value; });
+  if (events.length === 0) { showToast('Select at least one event', 'error'); return; }
+  
+  var payload = {
+    url: document.getElementById('wh-url').value.trim(),
+    events: events,
+    secret: document.getElementById('wh-secret').value.trim() || undefined
+  };
+  
+  fetch('/api/v1/webhooks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r) { if (!r.ok) throw new Error('Create failed'); return r.json(); })
+    .then(function(d) { showToast('Webhook created: ' + d.id); document.getElementById('webhook-form').reset(); loadWebhooks(); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+});
+
+function deleteWebhook(id) {
+  if (!confirm('Delete webhook ' + id + '?')) return;
+  fetch('/api/v1/webhooks/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r) { if (!r.ok) throw new Error('Delete failed'); showToast('Deleted'); loadWebhooks(); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+function viewWebhook(id) {
+  var modal = document.getElementById('wh-modal');
+  var body = document.getElementById('wh-modal-body');
+  modal.classList.remove('hidden');
+  body.innerHTML = '<div class="loading"><span class="spinner"></span> Loading...</div>';
+  fetch('/api/v1/webhooks/' + encodeURIComponent(id) + '/deliveries')
+    .then(function(r){return r.json();})
+    .then(function(d) {
+      var html = '<div class="grid-2 gap-4 mb-4">';
+      // Would need to fetch the webhook details separately, using the list data for now
+      html += '<div><strong>Deliveries</strong><div class="text-sm text-muted mt-1">' + (d.deliveries?.length || 0) + ' total</div></div>';
+      html += '</div>';
+      if (d.deliveries && d.deliveries.length) {
+        html += '<div class="max-h-60 overflow-auto"><table class="table"><thead><tr><th>Time</th><th>Event</th><th>Status</th><th>Response</th></tr></thead><tbody>';
+        d.deliveries.forEach(function(del) {
+          var statusClass = del.success ? 'badge-success' : 'badge-error';
+          html += '<tr><td class="text-sm text-muted">' + (del.timestamp ? new Date(del.timestamp).toLocaleString() : '-') + '</td>';
+          html += '<td><span class="badge badge-brand">' + esc(del.event || '-') + '</span></td>';
+          html += '<td><span class="badge ' + statusClass + '">' + (del.success ? 'OK' : 'Failed') + '</span></td>';
+          html += '<td class="text-sm text-muted font-mono">' + (del.response_code || '-') + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<p class="text-sm text-muted">No deliveries yet.</p>';
+      }
+      body.innerHTML = html;
+    }).catch(function(err) {
+      body.innerHTML = '<div class="alert alert-error">Failed to load: ' + esc(err.message) + '</div>';
+    });
+}
+
+loadWebhooks();
+</script>
+{{end}}

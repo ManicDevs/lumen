@@ -1,0 +1,231 @@
+{{define "content"}}
+<p class="text-sm text-secondary mb-6">Monitor and manage training jobs: fine-tuning, LoRA adapters, and few-shot training runs.</p>
+
+<div class="card mb-6">
+  <div class="card-header flex items-center justify-between">
+    <h3>Create Training Job</h3>
+  </div>
+  <div class="card-body">
+    <form id="train-form" class="grid-2 gap-4">
+      <div class="form-group">
+        <label class="form-label">Job Name</label>
+        <input type="text" class="form-input" id="train-name" placeholder="my-finetune-run" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-select" id="train-type" required>
+          <option value="fewshot">Few-shot Fine-tuning</option>
+          <option value="lora">LoRA Adapter</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Base Model</label>
+        <input type="text" class="form-input" id="train-base-model" placeholder="llama3.2" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Use All Data</label>
+        <div class="flex items-center gap-3 mt-2">
+          <input type="checkbox" id="train-use-all">
+          <label for="train-use-all" class="cursor-pointer">Use entire dataset (not just latest commit)</label>
+        </div>
+      </div>
+      <div class="form-group sm:col-span-2" id="lora-config" style="display:none;">
+        <label class="form-label">LoRA Config (JSON)</label>
+        <textarea class="form-input font-mono text-sm" id="train-lora-config" rows="5" placeholder='{"adapter_path": "./my-adapter", "model_name": "my-model:lora"}'></textarea>
+        <p class="text-sm text-muted mt-1">Required for LoRA: adapter_path (path to .gguf/.bin) and model_name (target model name)</p>
+      </div>
+      <div class="sm:col-span-2 flex gap-3">
+        <button type="submit" class="btn btn-brand">Start Training</button>
+        <button type="button" class="btn btn-secondary" onclick="loadModelsForTraining()">Refresh Models</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header flex items-center justify-between">
+    <h3>Training Jobs</h3>
+    <button class="btn btn-secondary btn-sm" onclick="loadJobs()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-container">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:12%">ID</th>
+            <th style="width:18%">Name</th>
+            <th style="width:10%">Type</th>
+            <th style="width:12%">Base Model</th>
+            <th style="width:12%">Status</th>
+            <th style="width:15%">Created</th>
+            <th style="width:15%">Completed</th>
+            <th style="width:10%">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="jobs-tbody">
+          <tr><td colspan="8" class="loading"><span class="spinner"></span> Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="logs-modal">
+  <div class="modal-overlay" onclick="closeModal('logs-modal')"></div>
+  <div class="modal-content" style="max-width:900px;">
+    <div class="modal-header"><h3>Job Logs: <span id="logs-job-id"></span></h3></div>
+    <div class="modal-body">
+      <pre class="log-output" id="logs-content"><span class="text-muted">Loading...</span></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('logs-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal hidden" id="result-modal">
+  <div class="modal-overlay" onclick="closeModal('result-modal')"></div>
+  <div class="modal-content" style="max-width:700px;">
+    <div class="modal-header"><h3>Job Result: <span id="result-job-id"></span></h3></div>
+    <div class="modal-body">
+      <pre class="log-output" id="result-content"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('result-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('train-type').addEventListener('change', function() {
+  document.getElementById('lora-config').style.display = this.value === 'lora' ? 'block' : 'none';
+});
+
+function loadModelsForTraining() {
+  fetch('/api/v1/models').then(r=>r.json()).then(d => {
+    var models = (d.models || []).map(m => m.name).join(', ');
+    showToast('Available: ' + (models || 'none'), 'info');
+  });
+}
+
+function loadJobs() {
+  var tbody = document.getElementById('jobs-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="loading"><span class="spinner"></span> Loading...</td></tr>';
+  fetch('/api/v1/training/jobs').then(function(r){return r.json();}).then(function(d) {
+    renderJobs(d.data || []);
+  }).catch(function(err) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-error">Failed: ' + esc(err.message) + '</td></tr>';
+  });
+}
+
+function renderJobs(jobs) {
+  var tbody = document.getElementById('jobs-tbody');
+  if (jobs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-8">No training jobs. Create one above.</td></tr>';
+    return;
+  }
+  var html = '';
+  jobs.forEach(function(j) {
+    var statusClass = 'badge-neutral';
+    if (j.status === 'completed') statusClass = 'badge-success';
+    else if (j.status === 'running') statusClass = 'badge-info';
+    else if (j.status === 'failed') statusClass = 'badge-error';
+    else if (j.status === 'cancelled') statusClass = 'badge-warning';
+    
+    html += '<tr>';
+    html += '<td><code class="text-xs">' + esc(j.id) + '</code></td>';
+    html += '<td><span class="font-medium">' + esc(j.name || '-') + '</span></td>';
+    html += '<td><span class="badge badge-brand">' + esc(j.type) + '</span></td>';
+    html += '<td><code class="text-sm">' + esc(j.base_model) + '</code></td>';
+    html += '<td><span class="badge ' + statusClass + '">' + esc(j.status) + '</span></td>';
+    html += '<td class="text-sm text-muted">' + (j.created_at ? new Date(j.created_at).toLocaleString() : '-') + '</td>';
+    html += '<td class="text-sm text-muted">' + (j.completed_at ? new Date(j.completed_at).toLocaleString() : '-') + '</td>';
+    html += '<td>';
+    html += '<div class="flex items-center gap-1">';
+    html += '<button class="btn btn-ghost btn-sm" onclick="viewLogs(\'' + esc(j.id) + '\')" title="Logs"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></button>';
+    if (j.status === 'completed' && j.result) {
+      html += '<button class="btn btn-ghost btn-sm" onclick="viewResult(\'' + esc(j.id) + '\')" title="Result"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></button>';
+    }
+    if (j.status === 'pending' || j.status === 'running') {
+      html += '<button class="btn btn-ghost btn-sm text-error" onclick="cancelJob(\'' + esc(j.id) + '\')" title="Cancel"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></button>';
+    }
+    html += '<button class="btn btn-ghost btn-sm" onclick="deleteJob(\'' + esc(j.id) + '\')" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>';
+    html += '</div></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+document.getElementById('train-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var config = {};
+  if (document.getElementById('train-type').value === 'lora') {
+    try { config = JSON.parse(document.getElementById('train-lora-config').value || '{}'); }
+    catch(err) { showToast('Invalid JSON in LoRA config', 'error'); return; }
+    if (!config.adapter_path || !config.model_name) { showToast('adapter_path and model_name required for LoRA', 'error'); return; }
+  }
+  var payload = {
+    type: document.getElementById('train-type').value,
+    base_model: document.getElementById('train-base-model').value.trim(),
+    config: config
+  };
+  if (document.getElementById('train-use-all').checked) payload.config.use_all = true;
+  if (!payload.base_model) { showToast('Base model required', 'error'); return; }
+  
+  fetch('/api/v1/training/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r) { if (!r.ok) throw new Error('Create failed'); return r.json(); })
+    .then(function(d) { showToast('Job created: ' + d.job_id); document.getElementById('train-form').reset(); loadJobs(); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+});
+
+function cancelJob(id) {
+  if (!confirm('Cancel job ' + id + '?')) return;
+  fetch('/api/v1/training/jobs/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r) { if (!r.ok) throw new Error('Cancel failed'); showToast('Cancelled'); loadJobs(); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+function deleteJob(id) {
+  if (!confirm('Delete job ' + id + '?')) return;
+  fetch('/api/v1/training/jobs/' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(function(r) { if (!r.ok) throw new Error('Delete failed'); showToast('Deleted'); loadJobs(); })
+    .catch(function(err) { showToast('Error: ' + err.message, 'error'); });
+}
+
+function viewLogs(id) {
+  document.getElementById('logs-job-id').textContent = id;
+  document.getElementById('logs-content').innerHTML = '<span class="text-muted">Loading...</span>';
+  document.getElementById('logs-modal').classList.remove('hidden');
+  fetch('/api/v1/training/jobs/' + encodeURIComponent(id) + '/logs')
+    .then(function(r){return r.json();})
+    .then(function(d) {
+      var logs = d.logs || [];
+      document.getElementById('logs-content').textContent = logs.join('\n') || '(no logs yet)';
+    }).catch(function(err) {
+      document.getElementById('logs-content').innerHTML = '<span class="text-error">Failed: ' + esc(err.message) + '</span>';
+    });
+}
+
+function viewResult(id) {
+  document.getElementById('result-job-id').textContent = id;
+  document.getElementById('result-content').textContent = 'Loading...';
+  document.getElementById('result-modal').classList.remove('hidden');
+  fetch('/api/v1/training/jobs/' + encodeURIComponent(id))
+    .then(function(r){return r.json();})
+    .then(function(d) {
+      document.getElementById('result-content').textContent = JSON.stringify(d, null, 2);
+    }).catch(function(err) {
+      document.getElementById('result-content').textContent = 'Error: ' + err.message;
+    });
+}
+
+loadJobs();
+setInterval(loadJobs, 10000);
+</script>
+{{end}}

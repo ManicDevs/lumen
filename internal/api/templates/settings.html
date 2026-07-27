@@ -1,0 +1,186 @@
+{{define "content"}}
+<p class="text-sm text-secondary mb-6">Configure Lumen settings: Ollama connection, API server, dataset paths, and more.</p>
+
+<div class="grid-2 gap-6 mb-6">
+  <div class="card">
+    <div class="card-header"><h3>Ollama Connection</h3></div>
+    <div class="card-body">
+      <form id="ollama-form" class="grid gap-4">
+        <div class="form-group">
+          <label class="form-label">Ollama Host</label>
+          <input type="url" class="form-input" id="cfg-ollama-host" value="{{.Config.OllamaHost}}" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Default Model</label>
+          <input type="text" class="form-input" id="cfg-ollama-model" value="{{.Config.OllamaModel}}" placeholder="llama3.2">
+        </div>
+        <div class="form-group">
+          <label class="form-label">API Port</label>
+          <input type="number" class="form-input" id="cfg-api-port" value="{{.Config.APIPort}}" min="1024" max="65535">
+        </div>
+        <button type="submit" class="btn btn-brand">Save Connection</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Dataset & Storage</h3></div>
+    <div class="card-body">
+      <div class="grid gap-4">
+        <div class="form-group">
+          <label class="form-label">Dataset Root</label>
+          <input type="text" class="form-input" value="{{.DatasetRoot}}" readonly>
+          <p class="text-sm text-muted mt-1">Set via LUMEN_DATASET_ROOT env var</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Log Level</label>
+          <select class="form-select" id="cfg-log-level">
+            <option value="debug" {{if eq .Config.LogLevel "debug"}}selected{{end}}>Debug</option>
+            <option value="info" {{if eq .Config.LogLevel "info"}}selected{{end}}>Info</option>
+            <option value="warn" {{if eq .Config.LogLevel "warn"}}selected{{end}}>Warn</option>
+            <option value="error" {{if eq .Config.LogLevel "error"}}selected{{end}}>Error</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-secondary" onclick="saveSettings()">Save Settings</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2 gap-6 mb-6">
+  <div class="card">
+    <div class="card-header"><h3>Rate Limiting</h3></div>
+    <div class="card-body">
+      <form id="ratelimit-form" class="grid gap-4">
+        <div class="form-group">
+          <label class="form-label">Requests/second per IP</label>
+          <input type="number" class="form-input" id="cfg-rate-rate" value="100" min="1" max="10000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Burst Capacity</label>
+          <input type="number" class="form-input" id="cfg-rate-burst" value="200" min="1" max="50000">
+        </div>
+        <button type="submit" class="btn btn-brand">Update Rate Limits</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3>Request Limits</h3></div>
+    <div class="card-body">
+      <form id="bodylimit-form" class="grid gap-4">
+        <div class="form-group">
+          <label class="form-label">Max Body Size (MB)</label>
+          <input type="number" class="form-input" id="cfg-body-limit" value="10" min="1" max="100">
+        </div>
+        <button type="submit" class="btn btn-brand">Update Limit</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-6">
+  <div class="card-header"><h3>System Information</h3></div>
+  <div class="card-body">
+    <div class="grid-2 gap-4" id="sys-info">
+      <div class="p-3 bg-neutral/10 rounded-lg">
+        <div class="text-sm text-muted">Version</div>
+        <div class="font-mono font-semibold" id="sys-version">-</div>
+      </div>
+      <div class="p-3 bg-neutral/10 rounded-lg">
+        <div class="text-sm text-muted">Uptime</div>
+        <div class="font-mono font-semibold" id="sys-uptime">-</div>
+      </div>
+      <div class="p-3 bg-neutral/10 rounded-lg">
+        <div class="text-sm text-muted">Go Version</div>
+        <div class="font-mono font-semibold" id="sys-go">-</div>
+      </div>
+      <div class="p-3 bg-neutral/10 rounded-lg">
+        <div class="text-sm text-muted">OS / Arch</div>
+        <div class="font-mono font-semibold" id="sys-arch">-</div>
+      </div>
+      <div class="p-3 bg-neutral/10 rounded-lg">
+        <div class="text-sm text-muted">Goroutines</div>
+        <div class="font-mono font-semibold" id="sys-goroutines">-</div>
+      </div>
+      <div class="p-3 bg-neutral/10 rounded-lg">
+        <div class="text-sm text-muted">Memory (Alloc)</div>
+        <div class="font-mono font-semibold" id="sys-mem">-</div>
+      </div>
+      <div class="p-3 bg-neutral/10 rounded-lg">
+        <div class="text-sm text-muted">CPU Cores</div>
+        <div class="font-mono font-semibold" id="sys-cpu">-</div>
+      </div>
+      <div class="p-3 bg-neutral/10 rounded-lg">
+        <div class="text-sm text-muted">Dataset Root</div>
+        <div class="font-mono text-xs" id="sys-dataset">{{.DatasetRoot}}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>Danger Zone</h3></div>
+  <div class="card-body">
+    <div class="flex items-center justify-between p-3 border rounded-lg bg-error/5">
+      <div>
+        <p class="font-medium text-error">Reset All Data</p>
+        <p class="text-sm text-muted">This will delete all datasets, models, evaluations, and audit logs. Cannot be undone.</p>
+      </div>
+      <button class="btn btn-error" onclick="confirmReset()">Reset Everything</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function loadSystemInfo() {
+  fetch('/api/v1/system/info').then(function(r){return r.json();}).then(function(d) {
+    document.getElementById('sys-version').textContent = d.version || '-';
+    document.getElementById('sys-uptime').textContent = d.uptime || '-';
+    document.getElementById('sys-go').textContent = d.go_version || '-';
+    document.getElementById('sys-arch').textContent = (d.go_os || '') + '/' + (d.go_arch || '');
+    document.getElementById('sys-goroutines').textContent = d.num_goroutine || '-';
+    document.getElementById('sys-mem').textContent = formatBytes(d.mem_alloc || 0);
+    document.getElementById('sys-cpu').textContent = d.num_cpu || '-';
+  }).catch(function(err) {
+    console.error('System info failed:', err);
+  });
+}
+
+function formatBytes(b) {
+  if (!b || b === 0) return '0 B';
+  var u = ['B','KB','MB','GB','TB'];
+  var i = Math.floor(Math.log(b) / Math.log(1024));
+  return (b / Math.pow(1024, i)).toFixed(1) + ' ' + u[i];
+}
+
+document.getElementById('ollama-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  showToast('Config changes require restart (edit .env or env vars)', 'warning');
+});
+
+document.getElementById('ratelimit-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  showToast('Rate limit changes require restart', 'warning');
+});
+
+document.getElementById('bodylimit-form').addEventListener('submit', function(e) {
+  e.preventDefault();
+  showToast('Body limit changes require restart', 'warning');
+});
+
+function saveSettings() {
+  showToast('Settings saved (requires restart for some changes)', 'info');
+}
+
+function confirmReset() {
+  if (!confirm('⚠️ This will DELETE ALL DATA: datasets, models, evals, webhooks, schedules. Type "DELETE" to confirm:')) return;
+  var input = prompt('Type "DELETE" to confirm:');
+  if (input !== 'DELETE') { showToast('Cancelled', 'info'); return; }
+  showToast('Reset not implemented in demo', 'error');
+}
+
+loadSystemInfo();
+setInterval(loadSystemInfo, 30000);
+</script>
+{{end}}

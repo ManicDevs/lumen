@@ -247,7 +247,7 @@ func TestHandleUIDashboard(t *testing.T) {
 func TestHandleUIAllPages(t *testing.T) {
 	t.Parallel()
 	s := newTestServer(t)
-	pages := []string{"/dashboard", "/datasets", "/generate", "/models", "/eval", "/train", "/prompts", "/git", "/versions"}
+	pages := []string{"/dashboard", "/datasets", "/generate", "/models", "/eval", "/train", "/prompts", "/git", "/versions", "/models-manage", "/training", "/audit", "/webhooks", "/schedules", "/settings"}
 	for _, page := range pages {
 		t.Run(page, func(t *testing.T) {
 			t.Parallel()
