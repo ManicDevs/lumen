@@ -1,5 +1,11 @@
 {{define "content"}}
-<p class="text-sm text-secondary mb-6">Create training data from source code using Ollama models.</p>
+<div class="flex items-center gap-3 mb-2">
+  <div class="stat-icon success">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+  </div>
+  <h2 class="text-lg font-bold">Data Generation</h2>
+</div>
+<p class="text-sm text-secondary mb-6" style="margin-left:3rem;">Create training data from source code using Ollama models.</p>
 
 <div class="tabs mb-6">
   <a href="/datasets" class="tab">Commits</a>
@@ -7,9 +13,15 @@
   <a href="/versions" class="tab">Versions</a>
 </div>
 
-<div class="grid-2">
+<div class="grid-2 mb-8">
   <div class="card">
-    <div class="card-header"><h3>Single Generate</h3></div>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Single Generate
+      </h3>
+      <span class="badge badge-neutral">One-shot</span>
+    </div>
     <div class="card-body">
       <form id="gen-form" onsubmit="return runGenerate(event)">
         <div class="form-group">
@@ -35,19 +47,31 @@
             </select>
           </div>
         </div>
-        <button type="submit" class="btn btn-primary w-full" id="gen-btn">Generate Dataset</button>
+        <button type="submit" class="btn btn-primary w-full" id="gen-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Generate Dataset
+        </button>
       </form>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>Batch Generate</h3></div>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Batch Generate
+      </h3>
+      <span class="badge badge-brand">Multi</span>
+    </div>
     <div class="card-body">
       <form id="batch-form" onsubmit="return runBatch(event)">
         <div class="form-group">
           <label class="form-label">Topics <span class="text-muted">(one per line)</span></label>
           <textarea class="form-textarea" id="batch-topics" rows="5" placeholder="SQL injection prevention&#10;Concurrent goroutine patterns&#10;HTTP middleware design" required></textarea>
-          <div class="form-hint" id="batch-count">0 topics</div>
+          <div class="form-hint flex items-center justify-between">
+            <span id="batch-count">0 topics</span>
+            <span class="text-muted">Parallel jobs multiply throughput</span>
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -67,15 +91,21 @@
           <label class="form-label">Model</label>
           <select class="form-select" id="batch-model"></select>
         </div>
-        <button type="submit" class="btn btn-primary w-full" id="batch-btn">Run Batch Generation</button>
+        <button type="submit" class="btn btn-primary w-full" id="batch-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Run Batch Generation
+        </button>
       </form>
     </div>
   </div>
 </div>
 
-<div class="card mt-6 hidden" id="gen-result">
+<div class="card hidden" id="gen-result">
   <div class="card-header">
-    <h3>Result</h3>
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Generation Result
+    </h3>
     <div class="flex items-center gap-2">
       <span class="badge badge-success" id="gen-status">Completed</span>
       <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gen-result').classList.add('hidden')">

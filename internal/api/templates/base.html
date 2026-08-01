@@ -190,6 +190,14 @@ function esc(s) {
   return d.innerHTML;
 }
 
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Copied to clipboard', 'success');
+  }).catch(function() {
+    showToast('Failed to copy', 'error');
+  });
+}
+
 function setLoading(btn, loading) {
   if (loading) {
     btn.dataset.origText = btn.textContent;

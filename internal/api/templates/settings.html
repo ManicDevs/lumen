@@ -1,131 +1,211 @@
 {{define "content"}}
-<p class="text-sm text-secondary mb-6">Configure Lumen settings: Ollama connection, API server, dataset paths, and more.</p>
+<div class="flex items-center gap-3 mb-2">
+  <div class="stat-icon brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </div>
+  <h2 class="text-lg font-bold">Settings</h2>
+</div>
+<p class="text-sm text-secondary mb-6" style="margin-left:3rem;">Configure Lumen: Ollama connection, API server, rate limits, dataset paths, and system information.</p>
 
-<div class="grid-2 gap-6 mb-6">
+<div class="grid-2 gap-6 mb-8">
   <div class="card">
-    <div class="card-header"><h3>Ollama Connection</h3></div>
-    <div class="card-body">
-      <form id="ollama-form" class="grid gap-4">
-        <div class="form-group">
-          <label class="form-label">Ollama Host</label>
-          <input type="url" class="form-input" id="cfg-ollama-host" value="{{.Config.OllamaHost}}" required>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        Ollama Connection
+      </h3>
+      <span class="badge badge-info">Live</span>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <form id="ollama-form">
+        <div id="api-config" class="flex flex-col">
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+            <label class="form-label" style="margin:0;min-width:140px;">Ollama Host</label>
+            <input type="url" class="form-input" id="cfg-ollama-host" value="{{.Config.OllamaHost}}" required style="max-width:280px;text-align:right;">
+          </div>
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+            <label class="form-label" style="margin:0;min-width:140px;">Default Model</label>
+            <input type="text" class="form-input" id="cfg-ollama-model" value="{{.Config.OllamaModel}}" placeholder="llama3.2" style="max-width:280px;text-align:right;">
+          </div>
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+            <label class="form-label" style="margin:0;min-width:140px;">API Port</label>
+            <input type="number" class="form-input" id="cfg-api-port" value="{{.Config.APIPort}}" min="1024" max="65535" style="max-width:120px;text-align:right;">
+          </div>
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+            <label class="form-label" style="margin:0;min-width:140px;">Log Level</label>
+            <select class="form-select" id="cfg-log-level" style="max-width:160px;text-align:right;">
+              <option value="debug" {{if eq .Config.LogLevel "debug"}}selected{{end}}>Debug</option>
+              <option value="info" {{if eq .Config.LogLevel "info"}}selected{{end}}>Info</option>
+              <option value="warn" {{if eq .Config.LogLevel "warn"}}selected{{end}}>Warn</option>
+              <option value="error" {{if eq .Config.LogLevel "error"}}selected{{end}}>Error</option>
+            </select>
+          </div>
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+            <label class="form-label" style="margin:0;min-width:140px;">Context Window</label>
+            <input type="number" class="form-input" id="cfg-ollama-numctx" value="{{.Config.OllamaNumCtx}}" min="256" max="131072" style="max-width:120px;text-align:right;">
+          </div>
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;">
+            <label class="form-label" style="margin:0;min-width:140px;">Log Format</label>
+            <select class="form-select" id="cfg-log-format" style="max-width:160px;text-align:right;">
+              <option value="text" {{if eq .Config.LogFormat "text"}}selected{{end}}>Text</option>
+              <option value="json" {{if eq .Config.LogFormat "json"}}selected{{end}}>JSON</option>
+            </select>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Default Model</label>
-          <input type="text" class="form-input" id="cfg-ollama-model" value="{{.Config.OllamaModel}}" placeholder="llama3.2">
+        <div class="flex items-center" style="padding:1rem 1.5rem;border-top:1px solid var(--border-color);background:var(--slate-50);">
+          <button type="submit" class="btn btn-primary btn-sm">Save Ollama Settings</button>
+          <span class="text-xs text-muted" style="margin-left:0.75rem;">Changes require restart</span>
         </div>
-        <div class="form-group">
-          <label class="form-label">API Port</label>
-          <input type="number" class="form-input" id="cfg-api-port" value="{{.Config.APIPort}}" min="1024" max="65535">
-        </div>
-        <button type="submit" class="btn btn-brand">Save Connection</button>
       </form>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>Dataset & Storage</h3></div>
-    <div class="card-body">
-      <div class="grid gap-4">
-        <div class="form-group">
-          <label class="form-label">Dataset Root</label>
-          <input type="text" class="form-input" value="{{.DatasetRoot}}" readonly>
-          <p class="text-sm text-muted mt-1">Set via LUMEN_DATASET_ROOT env var</p>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        System Information
+      </h3>
+      <span class="badge badge-neutral" id="sys-uptime-badge">-</span>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <div id="sys-info" class="flex flex-col">
+        <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+          <span class="text-sm font-medium">Version</span>
+          <span class="font-mono text-sm" id="sys-version">-</span>
         </div>
-        <div class="form-group">
-          <label class="form-label">Log Level</label>
-          <select class="form-select" id="cfg-log-level">
-            <option value="debug" {{if eq .Config.LogLevel "debug"}}selected{{end}}>Debug</option>
-            <option value="info" {{if eq .Config.LogLevel "info"}}selected{{end}}>Info</option>
-            <option value="warn" {{if eq .Config.LogLevel "warn"}}selected{{end}}>Warn</option>
-            <option value="error" {{if eq .Config.LogLevel "error"}}selected{{end}}>Error</option>
-          </select>
+        <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+          <span class="text-sm font-medium">Uptime</span>
+          <span class="font-mono text-sm" id="sys-uptime">-</span>
         </div>
-        <button type="button" class="btn btn-secondary" onclick="saveSettings()">Save Settings</button>
+        <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+          <span class="text-sm font-medium">Go Version</span>
+          <span class="font-mono text-sm" id="sys-go">-</span>
+        </div>
+        <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+          <span class="text-sm font-medium">OS / Arch</span>
+          <span class="font-mono text-sm" id="sys-arch">-</span>
+        </div>
+        <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+          <span class="text-sm font-medium">Goroutines</span>
+          <span class="font-mono text-sm" id="sys-goroutines">-</span>
+        </div>
+        <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+          <span class="text-sm font-medium">Memory (Alloc)</span>
+          <span class="font-mono text-sm" id="sys-mem">-</span>
+        </div>
+        <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+          <span class="text-sm font-medium">CPU Cores</span>
+          <span class="font-mono text-sm" id="sys-cpu">-</span>
+        </div>
+        <div class="flex items-center justify-between" style="padding:1rem 1.5rem;">
+          <span class="text-sm font-medium">Dataset Root</span>
+          <span class="font-mono text-sm" style="word-break:break-all;text-align:right;">{{.DatasetRoot}}</span>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="grid-2 gap-6 mb-6">
+<div class="card mb-8">
+  <div class="card-header">
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M21 12a7 7 0 0 1-7 7M21 12a7 7 0 0 0-7-7M21 12V5a2 2 0 0 0-4 0v7"/></svg>
+      Paths
+    </h3>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div class="flex flex-col">
+      <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+        <span class="text-sm font-medium">Session Directory</span>
+        <div class="flex items-center" style="gap:0.5rem;">
+          <span class="font-mono text-sm" style="word-break:break-all;text-align:right;">{{.Config.SessionDir}}</span>
+          <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" onclick="copyToClipboard('{{.Config.SessionDir}}')" title="Copy path">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="flex items-center justify-between" style="padding:1rem 1.5rem;">
+        <span class="text-sm font-medium">Audit Log</span>
+        <div class="flex items-center" style="gap:0.5rem;">
+          <span class="font-mono text-sm" style="word-break:break-all;text-align:right;">{{.Config.AuditLogPath}}</span>
+          <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" onclick="copyToClipboard('{{.Config.AuditLogPath}}')" title="Copy path">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2 gap-6 mb-8">
   <div class="card">
-    <div class="card-header"><h3>Rate Limiting</h3></div>
-    <div class="card-body">
-      <form id="ratelimit-form" class="grid gap-4">
-        <div class="form-group">
-          <label class="form-label">Requests/second per IP</label>
-          <input type="number" class="form-input" id="cfg-rate-rate" value="100" min="1" max="10000">
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Rate Limiting
+      </h3>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <form id="ratelimit-form">
+        <div class="flex flex-col">
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+            <label class="form-label" style="margin:0;min-width:160px;">Requests/sec per IP</label>
+            <input type="number" class="form-input" id="cfg-rate-rate" value="100" min="1" max="10000" style="max-width:120px;text-align:right;">
+          </div>
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;">
+            <label class="form-label" style="margin:0;min-width:160px;">Burst Capacity</label>
+            <input type="number" class="form-input" id="cfg-rate-burst" value="200" min="1" max="50000" style="max-width:120px;text-align:right;">
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Burst Capacity</label>
-          <input type="number" class="form-input" id="cfg-rate-burst" value="200" min="1" max="50000">
+        <div class="flex items-center" style="padding:1rem 1.5rem;border-top:1px solid var(--border-color);background:var(--slate-50);">
+          <button type="submit" class="btn btn-primary btn-sm">Update Rate Limits</button>
+          <span class="text-xs text-muted" style="margin-left:0.75rem;">Requires restart</span>
         </div>
-        <button type="submit" class="btn btn-brand">Update Rate Limits</button>
       </form>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>Request Limits</h3></div>
-    <div class="card-body">
-      <form id="bodylimit-form" class="grid gap-4">
-        <div class="form-group">
-          <label class="form-label">Max Body Size (MB)</label>
-          <input type="number" class="form-input" id="cfg-body-limit" value="10" min="1" max="100">
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Request Limits
+      </h3>
+    </div>
+    <div class="card-body" style="padding:0;">
+      <form id="bodylimit-form">
+        <div class="flex flex-col">
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;border-bottom:1px solid var(--border-color);">
+            <label class="form-label" style="margin:0;min-width:160px;">Max Body Size (MB)</label>
+            <input type="number" class="form-input" id="cfg-body-limit" value="10" min="1" max="100" style="max-width:120px;text-align:right;">
+          </div>
+          <div class="flex items-center justify-between" style="padding:1rem 1.5rem;">
+            <label class="form-label" style="margin:0;min-width:160px;">Request Timeout (sec)</label>
+            <input type="number" class="form-input" id="cfg-timeout" value="60" min="1" max="3600" style="max-width:120px;text-align:right;">
+          </div>
         </div>
-        <button type="submit" class="btn btn-brand">Update Limit</button>
+        <div class="flex items-center" style="padding:1rem 1.5rem;border-top:1px solid var(--border-color);background:var(--slate-50);">
+          <button type="submit" class="btn btn-primary btn-sm">Update Limits</button>
+          <span class="text-xs text-muted" style="margin-left:0.75rem;">Requires restart</span>
+        </div>
       </form>
     </div>
   </div>
 </div>
 
-<div class="card mb-6">
-  <div class="card-header"><h3>System Information</h3></div>
+<div class="card mb-8">
+  <div class="card-header">
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Danger Zone
+    </h3>
+  </div>
   <div class="card-body">
-    <div class="grid-2 gap-4" id="sys-info">
-      <div class="p-3 bg-neutral/10 rounded-lg">
-        <div class="text-sm text-muted">Version</div>
-        <div class="font-mono font-semibold" id="sys-version">-</div>
-      </div>
-      <div class="p-3 bg-neutral/10 rounded-lg">
-        <div class="text-sm text-muted">Uptime</div>
-        <div class="font-mono font-semibold" id="sys-uptime">-</div>
-      </div>
-      <div class="p-3 bg-neutral/10 rounded-lg">
-        <div class="text-sm text-muted">Go Version</div>
-        <div class="font-mono font-semibold" id="sys-go">-</div>
-      </div>
-      <div class="p-3 bg-neutral/10 rounded-lg">
-        <div class="text-sm text-muted">OS / Arch</div>
-        <div class="font-mono font-semibold" id="sys-arch">-</div>
-      </div>
-      <div class="p-3 bg-neutral/10 rounded-lg">
-        <div class="text-sm text-muted">Goroutines</div>
-        <div class="font-mono font-semibold" id="sys-goroutines">-</div>
-      </div>
-      <div class="p-3 bg-neutral/10 rounded-lg">
-        <div class="text-sm text-muted">Memory (Alloc)</div>
-        <div class="font-mono font-semibold" id="sys-mem">-</div>
-      </div>
-      <div class="p-3 bg-neutral/10 rounded-lg">
-        <div class="text-sm text-muted">CPU Cores</div>
-        <div class="font-mono font-semibold" id="sys-cpu">-</div>
-      </div>
-      <div class="p-3 bg-neutral/10 rounded-lg">
-        <div class="text-sm text-muted">Dataset Root</div>
-        <div class="font-mono text-xs" id="sys-dataset">{{.DatasetRoot}}</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3>Danger Zone</h3></div>
-  <div class="card-body">
-    <div class="flex items-center justify-between p-3 border rounded-lg bg-error/5">
+    <div class="flex items-center justify-between" style="padding:1rem;border:1px solid var(--error-100);border-radius:var(--radius-lg);background:var(--error-50);">
       <div>
         <p class="font-medium text-error">Reset All Data</p>
-        <p class="text-sm text-muted">This will delete all datasets, models, evaluations, and audit logs. Cannot be undone.</p>
+        <p class="text-sm text-muted" style="margin-top:0.25rem;">This will permanently delete all datasets, models, evaluations, webhooks, schedules, and audit logs. This action cannot be undone.</p>
       </div>
       <button class="btn btn-error" onclick="confirmReset()">Reset Everything</button>
     </div>
@@ -137,6 +217,7 @@ function loadSystemInfo() {
   fetch('/api/v1/system/info').then(function(r){return r.json();}).then(function(d) {
     document.getElementById('sys-version').textContent = d.version || '-';
     document.getElementById('sys-uptime').textContent = d.uptime || '-';
+    document.getElementById('sys-uptime-badge').textContent = d.uptime || '-';
     document.getElementById('sys-go').textContent = d.go_version || '-';
     document.getElementById('sys-arch').textContent = (d.go_os || '') + '/' + (d.go_arch || '');
     document.getElementById('sys-goroutines').textContent = d.num_goroutine || '-';
@@ -169,14 +250,10 @@ document.getElementById('bodylimit-form').addEventListener('submit', function(e)
   showToast('Body limit changes require restart', 'warning');
 });
 
-function saveSettings() {
-  showToast('Settings saved (requires restart for some changes)', 'info');
-}
-
 function confirmReset() {
-  if (!confirm('⚠️ This will DELETE ALL DATA: datasets, models, evals, webhooks, schedules. Type "DELETE" to confirm:')) return;
-  var input = prompt('Type "DELETE" to confirm:');
-  if (input !== 'DELETE') { showToast('Cancelled', 'info'); return; }
+  if (!confirm('⚠️ This will DELETE ALL DATA: datasets, models, evals, webhooks, schedules, audit logs.\n\nType "DELETE ALL" to confirm:')) return;
+  var input = prompt('Type "DELETE ALL" to confirm:');
+  if (input !== 'DELETE ALL') { showToast('Cancelled', 'info'); return; }
   showToast('Reset not implemented in demo', 'error');
 }
 

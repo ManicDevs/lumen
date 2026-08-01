@@ -1,5 +1,11 @@
 {{define "content"}}
-<p class="text-sm text-secondary mb-6">All models available on the connected Ollama instance.</p>
+<div class="flex items-center gap-3 mb-2">
+  <div class="stat-icon brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+  </div>
+  <h2 class="text-lg font-bold">Model Registry</h2>
+</div>
+<p class="text-sm text-secondary mb-6" style="margin-left:3rem;">All models available on the connected Ollama instance.</p>
 
 <div class="flex items-center justify-between mb-6">
   <div class="flex items-center gap-3">
@@ -66,19 +72,23 @@ function renderModels(models) {
   var html = '';
   models.forEach(function(m) {
     var details = m.details || {};
-    html += '<div class="card"><div class="card-body">';
+    var sizeStr = formatBytes(m.size);
+    var modifiedStr = '';
+    if (m.modified_at) {
+      var d = new Date(m.modified_at);
+      modifiedStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    }
+    html += '<div class="card" style="transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.06);">';
+    html += '<div class="card-body">';
     html += '<div class="flex items-center justify-between mb-3">';
     html += '<h3 class="text-sm font-semibold" style="word-break:break-all;flex:1;margin-right:0.5rem;">' + esc(m.name || m.model) + '</h3>';
     html += '<span class="badge badge-brand">' + (details.parameter_size || 'N/A') + '</span>';
     html += '</div>';
     html += '<div class="flex flex-col gap-2">';
-    html += '<div class="flex justify-between text-sm"><span class="text-muted">Size</span><span class="font-mono">' + formatBytes(m.size) + '</span></div>';
-    if (details.family) html += '<div class="flex justify-between text-sm"><span class="text-muted">Family</span><span>' + esc(details.family) + '</span></div>';
+    html += '<div class="flex justify-between text-sm"><span class="text-muted">Size</span><span class="font-mono">' + sizeStr + '</span></div>';
+    if (details.family) html += '<div class="flex justify-between text-sm"><span class="text-muted">Family</span><span class="badge badge-neutral">' + esc(details.family) + '</span></div>';
     if (details.quantization_level) html += '<div class="flex justify-between text-sm"><span class="text-muted">Quantization</span><span class="badge badge-neutral">' + esc(details.quantization_level) + '</span></div>';
-    if (m.modified_at) {
-      var d = new Date(m.modified_at);
-      html += '<div class="flex justify-between text-sm"><span class="text-muted">Modified</span><span class="text-secondary">' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '</span></div>';
-    }
+    if (modifiedStr) html += '<div class="flex justify-between text-sm"><span class="text-muted">Modified</span><span class="text-secondary">' + modifiedStr + '</span></div>';
     html += '</div></div></div>';
   });
   el.innerHTML = html;

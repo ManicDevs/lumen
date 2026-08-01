@@ -1139,6 +1139,76 @@ code, pre, .mono { font-family: var(--font-mono); }
 }
 
 /* ============================================================
+   Progress Bar
+   ============================================================ */
+
+.progress {
+  width: 100%;
+  height: 8px;
+  background: var(--slate-200);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+}
+
+/* ============================================================
+   Log Output
+   ============================================================ */
+
+.log-output {
+  background: var(--slate-900);
+  color: #e2e8f0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============================================================
+   Form Check
+   ============================================================ */
+
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.form-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-600);
+  cursor: pointer;
+}
+
+/* ============================================================
+   Table Container
+   ============================================================ */
+
+.table-container {
+  overflow-x: auto;
+}
+
+/* ============================================================
+   Utility: ms-2 (margin-start)
+   ============================================================ */
+
+.ms-2 { margin-left: var(--space-2); }
+
+/* ============================================================
    Scrollbar Styling
    ============================================================ */
 

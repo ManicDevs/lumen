@@ -1,10 +1,31 @@
 {{define "content"}}
-<p class="text-sm text-secondary mb-6">Fine-tune models using few-shot training or LoRA adapters.</p>
+<div class="flex items-center gap-3 mb-2">
+  <div class="stat-icon brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+  </div>
+  <h2 class="text-lg font-bold">Model Training</h2>
+</div>
+<p class="text-sm text-secondary mb-6" style="margin-left:3rem;">Fine-tune models using few-shot training or LoRA adapters.</p>
 
 <div class="grid-2 mb-8">
   <div class="card">
-    <div class="card-header"><h3>Few-Shot Training</h3></div>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Few-Shot Training
+      </h3>
+      <span class="badge badge-neutral">Quick</span>
+    </div>
     <div class="card-body">
+      <div class="p-4 rounded-lg border mb-4" style="background:var(--brand-50);border-color:var(--brand-100);">
+        <div class="flex items-start gap-3">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <div>
+            <div class="text-sm font-semibold" style="color:var(--brand-700);">About Few-Shot Training</div>
+            <div class="text-xs mt-1" style="color:var(--brand-600);">Creates a new model by examples using existing dataset commits. Best for quick iterations.</div>
+          </div>
+        </div>
+      </div>
       <form id="train-form" onsubmit="return runTrain(event)">
         <div class="form-group">
           <label class="form-label">Base Model</label>
@@ -16,22 +37,40 @@
             Use ALL commits (fresh + archived)
           </label>
         </div>
-        <div class="alert alert-info mb-4" style="margin-bottom:1rem;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span class="text-sm">Few-shot training creates a new model by examples. Requires existing commits.</span>
-        </div>
-        <button type="submit" class="btn btn-primary w-full" id="train-btn">Start Training</button>
+        <button type="submit" class="btn btn-primary w-full" id="train-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Start Training
+        </button>
       </form>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>LoRA Adapter Training</h3></div>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        LoRA Adapter Training
+      </h3>
+      <span class="badge badge-info">Advanced</span>
+    </div>
     <div class="card-body">
+      <div class="p-4 rounded-lg border mb-4" style="background:var(--info-50);border-color:var(--info-100);">
+        <div class="flex items-start gap-3">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--info-600)" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <div>
+            <div class="text-sm font-semibold" style="color:var(--info-700);">About LoRA Adapters</div>
+            <div class="text-xs mt-1" style="color:var(--info-600);">Upload a .gguf LoRA adapter to create a new model variant with specialized knowledge.</div>
+          </div>
+        </div>
+      </div>
       <form id="lora-form" onsubmit="return runLoRA(event)">
         <div class="form-group">
           <label class="form-label">Adapter File (.gguf)</label>
-          <input type="file" class="form-input" id="lora-file" accept=".gguf" style="padding:0.375rem;">
+          <div class="p-3 rounded-lg border text-center" style="background:var(--slate-50);border-style:dashed;cursor:pointer;" onclick="document.getElementById('lora-file').click()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" style="margin:0 auto 0.5rem;display:block;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <div class="text-sm text-muted" id="lora-file-label">Click to select .gguf file</div>
+            <input type="file" class="form-input hidden" id="lora-file" accept=".gguf" onchange="document.getElementById('lora-file-label').textContent=this.files[0]?this.files[0].name:'Click to select .gguf file'">
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -43,11 +82,10 @@
             <select class="form-select" id="lora-base"></select>
           </div>
         </div>
-        <div class="alert alert-info mb-4" style="margin-bottom:1rem;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span class="text-sm">Upload a .gguf LoRA adapter to create a new model variant.</span>
-        </div>
-        <button type="submit" class="btn btn-primary w-full" id="lora-btn">Create LoRA Model</button>
+        <button type="submit" class="btn btn-primary w-full" id="lora-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>
+          Create LoRA Model
+        </button>
       </form>
     </div>
   </div>
@@ -55,7 +93,10 @@
 
 <div class="card hidden" id="train-result">
   <div class="card-header">
-    <h3>Training Result</h3>
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Training Result
+    </h3>
     <span class="badge badge-success" id="train-status">Completed</span>
   </div>
   <div class="card-body">

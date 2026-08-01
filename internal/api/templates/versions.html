@@ -1,4 +1,12 @@
 {{define "content"}}
+<div class="flex items-center gap-3 mb-2">
+  <div class="stat-icon info">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+  </div>
+  <h2 class="text-lg font-bold">Dataset Versions</h2>
+</div>
+<p class="text-sm text-secondary mb-6" style="margin-left:3rem;">Create, compare, and rollback dataset versions with full lifecycle management.</p>
+
 <div class="tabs mb-6">
   <a href="/datasets" class="tab">Commits</a>
   <a href="/generate" class="tab">Generate</a>
@@ -7,7 +15,13 @@
 
 <div class="grid-2 mb-8">
   <div class="card">
-    <div class="card-header"><h3>Create Version</h3></div>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Create Version
+      </h3>
+      <span class="badge badge-neutral">Tag</span>
+    </div>
     <div class="card-body">
       <form id="version-form" onsubmit="return createVersion(event)">
         <div class="form-row">
@@ -21,13 +35,21 @@
             <input type="text" class="form-input" id="ver-msg" placeholder="Initial release">
           </div>
         </div>
-        <button type="submit" class="btn btn-primary w-full" id="ver-btn">Create Version</button>
+        <button type="submit" class="btn btn-primary w-full" id="ver-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Create Version
+        </button>
       </form>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>Diff Versions</h3></div>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/></svg>
+        Diff Versions
+      </h3>
+    </div>
     <div class="card-body">
       <form id="diff-form" onsubmit="return diffVersions(event)">
         <div class="form-row">
@@ -40,7 +62,10 @@
             <input type="text" class="form-input" id="diff-to" placeholder="v1.1.0" required>
           </div>
         </div>
-        <button type="submit" class="btn btn-secondary w-full" id="diff-btn">Compare Versions</button>
+        <button type="submit" class="btn btn-secondary w-full" id="diff-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/></svg>
+          Compare Versions
+        </button>
       </form>
     </div>
   </div>
@@ -48,8 +73,14 @@
 
 <div class="card mb-8">
   <div class="card-header">
-    <h3>Version History</h3>
-    <button class="btn btn-ghost btn-sm" onclick="loadVersions()">Refresh</button>
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Version History
+    </h3>
+    <button class="btn btn-ghost btn-sm" onclick="loadVersions()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
   </div>
   <div class="card-body" style="padding:0;" id="versions-list">
     <div class="loading"><span class="spinner"></span> Loading versions...</div>
@@ -58,7 +89,10 @@
 
 <div class="card hidden" id="diff-result">
   <div class="card-header">
-    <h3>Diff Result</h3>
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/></svg>
+      Diff Result
+    </h3>
     <button class="btn btn-ghost btn-sm" onclick="document.getElementById('diff-result').classList.add('hidden')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       Close
@@ -90,7 +124,9 @@ function loadVersions() {
       html += '</div>';
       html += '<div class="flex items-center gap-3">';
       html += '<span class="badge badge-neutral">' + (v.datapoints || 0) + ' pts</span>';
-      html += '<button class="btn btn-ghost btn-sm" onclick="rollbackVersion(\'' + esc(v.id) + '\',\'' + esc(v.tag || v.id) + '\')">Rollback</button>';
+      html += '<button class="btn btn-ghost btn-sm" onclick="rollbackVersion(\'' + esc(v.id) + '\',\'' + esc(v.tag || v.id) + '\')">';
+      html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+      html += ' Rollback</button>';
       html += '</div></div></div>';
     });
     html += '</div>';

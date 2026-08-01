@@ -1,9 +1,21 @@
 {{define "content"}}
-<p class="text-sm text-secondary mb-6">Compare tuned model against base model with side-by-side evaluation.</p>
+<div class="flex items-center gap-3 mb-2">
+  <div class="stat-icon info">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+  </div>
+  <h2 class="text-lg font-bold">Model Evaluation</h2>
+</div>
+<p class="text-sm text-secondary mb-6" style="margin-left:3rem;">Compare tuned model against base model with side-by-side evaluation.</p>
 
 <div class="grid-2 mb-8">
   <div class="card">
-    <div class="card-header"><h3>Run Evaluation</h3></div>
+    <div class="card-header">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Run Evaluation
+      </h3>
+      <span class="badge badge-neutral">Compare</span>
+    </div>
     <div class="card-body">
       <form id="eval-form" onsubmit="return runEval(event)">
         <div class="form-row">
@@ -20,14 +32,20 @@
           <label class="form-label">Prompts <span class="text-muted">(one per line)</span></label>
           <textarea class="form-textarea" id="eval-prompts" rows="4" placeholder="Find bugs in this concurrent Go code.&#10;Identify security issues in this auth handler.&#10;Optimize this hot path for allocations."></textarea>
         </div>
-        <button type="submit" class="btn btn-primary w-full" id="eval-btn">Start Evaluation</button>
+        <button type="submit" class="btn btn-primary w-full" id="eval-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Start Evaluation
+        </button>
       </form>
     </div>
   </div>
 
   <div class="card">
     <div class="card-header">
-      <h3>Recent Evaluations</h3>
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Recent Evaluations
+      </h3>
       <button class="btn btn-ghost btn-sm" onclick="loadEvals()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         Refresh
@@ -41,7 +59,10 @@
 
 <div class="card hidden" id="eval-detail">
   <div class="card-header">
-    <h3 id="eval-detail-title">Evaluation Results</h3>
+    <h3 id="eval-detail-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:0.375rem;"><circle cx="12" cy="12" r="10"/></svg>
+      Evaluation Results
+    </h3>
     <button class="btn btn-ghost btn-sm" onclick="document.getElementById('eval-detail').classList.add('hidden')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       Close
