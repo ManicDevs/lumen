@@ -156,7 +156,9 @@ func Run(args []string) int {
 			break
 		}
 		input := strings.TrimSpace(scanner.Text())
-		if input == "exit" || input == "quit" {
+		if input == "exit" || input == "quit" || input == "/exit" || input == "/quit" {
+			fmt.Println("[Lumen] Graceful shutdown completed.")
+			os.Exit(0)
 			break
 		}
 		if input == "" {
